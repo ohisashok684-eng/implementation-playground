@@ -1,29 +1,86 @@
 
 
-## Problem
+## Редизайн админ-панели (обновленный план)
 
-The page is stuck on a loading spinner because `useAuth.tsx` makes database queries (`profiles`, `user_roles`) inside `onAuthStateChange` **without try/catch**. If any query fails, `setLoading(false)` is never called, and `ProtectedRoute` shows the spinner indefinitely.
+### Что меняется по сравнению с предыдущим планом
 
-## Fix
+1. **Дорожные карты** -- НЕ на чтение. Админ может создавать, редактировать шаги и загружать файл дорожной карты для клиента.
+2. **Трекинг** -- у каждого клиента свои вопросы. Админ может добавлять, удалять и редактировать вопросы для ежедневного и еженедельного трекинга.
 
-**File: `src/hooks/useAuth.tsx`**
+---
 
-1. Wrap the `onAuthStateChange` callback body in `try/catch/finally`, ensuring `setLoading(false)` always runs
-2. Wrap the `getSession().then()` logic in `try/catch/finally` as well
-3. Add `try/catch` inside `fetchRole` so a failing query doesn't throw
+### 1. Новая таблица: `tracking_questions`
 
-This is a small, targeted fix -- about 10-15 lines of changes to add proper error handling.
+Хранит индивидуальные вопросы трекинга для каждого клиента.
 
-## Technical Details
+| Колонка | Тип | Описание |
+|---------|-----|----------|
+| id | uuid (PK) | Уникальный ID |
+| user_id | uuid | ID клиента |
+| question_type | text | `daily` или `weekly` |
+| question_text | text | Текст вопроса |
+| field_type | text | `text` или `scale` (текстовый ответ или шкала 1-10) |
+| sort_order | integer | Порядок отображения |
 
-```text
-Before (simplified):
-  onAuthStateChange -> query profiles -> query user_roles -> setLoading(false)
-                       ^^ if this fails, setLoading never called
+RLS-политики: доступ для владельца и super_admin (аналогично остальным таблицам).
 
-After:
-  onAuthStateChange -> try { query profiles -> query user_roles } 
-                       catch { log error }
-                       finally { setLoading(false) }  <-- always runs
-```
+---
+
+### 2. Новая колонка в `roadmaps`: `file_url`
+
+Добавить колонку `file_url text` в таблицу `roadmaps` для хранения ссылки на загруженный файл дорожной карты.
+
+---
+
+### 3. Переработка `AdminClientView.tsx`
+
+Единая страница профиля клиента со всеми секциями и возможностью управления:
+
+**Секция "Сессии"** -- список + кнопка "Добавить сессию" (форма: номер, дата, время, саммари, шаги). Toast при сохранении.
+
+**Секция "Протоколы"** -- список + кнопка "Добавить протокол" (название, описание, цвет, файл). Файл загружается в Storage `mentoring-files`. После сохранения протокол сразу виден в списке.
+
+**Секция "Дорожные карты"** (редактируемая):
+- Список карт + кнопка "Добавить дорожную карту"
+- Создание: название, описание, статус
+- Редактирование шагов: добавить/удалить шаг, текст, дедлайн, отметка выполнения
+- Загрузка файла дорожной карты (в Storage `mentoring-files`, URL сохраняется в `roadmaps.file_url`)
+
+**Секция "Вопросы трекинга"** (новая):
+- Две вкладки: "Ежедневные" и "Еженедельные"
+- Список вопросов для каждого типа
+- Кнопка "Добавить вопрос" -- текст вопроса + тип поля (текст/шкала)
+- Редактирование текста вопроса inline
+- Удаление вопроса
+- Drag-порядок через sort_order
+
+**Секции на чтение**: Цели, Аудит вулканов, Метрики состояния, Дневник -- без изменений.
+
+---
+
+### 4. Обновление клиентского трекинга (`TrackingTab.tsx`)
+
+Вместо захардкоженных вопросов ("Как вы себя чувствуете?", "Намерение на сегодня?" и т.д.) -- загружать вопросы из таблицы `tracking_questions` по `user_id`. Если вопросов нет -- показывать заглушку "Вопросы для трекинга пока не добавлены".
+
+---
+
+### 5. Удаление страницы "Контент"
+
+- Удалить `src/pages/admin/AdminContent.tsx`
+- Убрать роут `/admin/content` из `App.tsx`
+- Убрать пункт "Контент" из навигации в `AdminLayout.tsx`
+
+---
+
+### Список файлов для изменения
+
+| Файл | Действие |
+|------|----------|
+| Миграция БД | Создать таблицу `tracking_questions`, добавить `file_url` в `roadmaps` |
+| `src/pages/admin/AdminClientView.tsx` | Полная переработка: добавить управление сессиями, протоколами, дорожными картами, вопросами трекинга |
+| `src/pages/admin/AdminLayout.tsx` | Убрать пункт "Контент" |
+| `src/App.tsx` | Убрать роут `/admin/content` и импорт `AdminContent` |
+| `src/pages/admin/AdminContent.tsx` | Удалить |
+| `src/tabs/TrackingTab.tsx` | Загружать вопросы из БД вместо захардкоженных |
+| `src/pages/Index.tsx` | Обновить пропсы `TrackingTab` (передать `userId`) |
 
