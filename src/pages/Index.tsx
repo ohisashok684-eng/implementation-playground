@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
-import { User, Plus, Trash2, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Plus, Trash2, X, Flag, Rocket, Check } from 'lucide-react';
 import BottomNav from '@/components/BottomNav';
 import NotificationToast from '@/components/NotificationToast';
 import ModalOverlay from '@/components/ModalOverlay';
+import VolcanoIcon from '@/components/VolcanoIcon';
 import DashboardTab from '@/tabs/DashboardTab';
 import TrackingTab from '@/tabs/TrackingTab';
 import RoadmapsTab from '@/tabs/RoadmapsTab';
@@ -33,7 +34,13 @@ const Index = () => {
   const [progressMetrics, setProgressMetrics] = useState(initialProgressMetrics);
   const [roadmaps, setRoadmaps] = useState(initialRoadmaps);
   const [routeInfo, setRouteInfo] = useState(initialRouteInfo);
-  const [pointB] = useState(initialPointB);
+
+  // Point B editable state
+  const [resultsB, setResultsB] = useState(initialPointB);
+  const [savedStatusB, setSavedStatusB] = useState<string | null>(null);
+
+  // Volcano saved status
+  const [savedStatus, setSavedStatus] = useState<number | null>(null);
 
   // Modal states
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
@@ -115,6 +122,30 @@ const Index = () => {
       [editingMetric]: { ...prev[editingMetric], previous: prevValue, current: val },
     }));
     setEditingMetric(null);
+  };
+
+  // Volcano handlers
+  const updateVolcanoValue = (index: number, newValue: number) => {
+    const updated = [...volcanoes];
+    updated[index].value = newValue;
+    setVolcanoes(updated);
+  };
+
+  const updateVolcanoComment = (index: number, comment: string) => {
+    const updated = [...volcanoes];
+    updated[index].comment = comment;
+    setVolcanoes(updated);
+  };
+
+  const fixVolcanoComment = (index: number) => {
+    setSavedStatus(index);
+    setTimeout(() => setSavedStatus(null), 1500);
+  };
+
+  // Point B handlers
+  const fixResultB = (field: string) => {
+    setSavedStatusB(field);
+    setTimeout(() => setSavedStatusB(null), 1500);
   };
 
   // Diary handlers
@@ -215,7 +246,7 @@ const Index = () => {
             <button
               onClick={() => setTempGoal({ ...tempGoal, hasAmount: !tempGoal.hasAmount })}
               className={`w-10 h-6 rounded-full transition-colors relative ${
-                tempGoal.hasAmount ? 'bg-secondary' : 'bg-muted'
+                tempGoal.hasAmount ? 'bg-purple-500' : 'bg-slate-200'
               }`}
             >
               <div
@@ -245,7 +276,7 @@ const Index = () => {
                 max={100}
                 value={tempGoal.progress}
                 onChange={(e) => setTempGoal({ ...tempGoal, progress: parseInt(e.target.value) })}
-                className="w-full h-1 bg-muted rounded-lg appearance-none cursor-pointer accent-secondary"
+                className="w-full h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
               <span className="text-sm font-bold text-foreground w-12 text-right">{tempGoal.progress}%</span>
             </div>
@@ -256,7 +287,7 @@ const Index = () => {
           {editingGoalId && (
             <button
               onClick={() => deleteGoal(editingGoalId)}
-              className="w-full text-center text-[10px] text-destructive font-bold uppercase tracking-widest py-2 hover:text-destructive/80 transition-colors"
+              className="w-full text-center text-[10px] text-rose-400 font-bold uppercase tracking-widest py-2 hover:text-rose-600 transition-colors"
             >
               Удалить цель
             </button>
@@ -292,7 +323,7 @@ const Index = () => {
             {tempRoute.resources.map((res, i) => (
               <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-xl">
                 <span className="text-xs font-medium text-foreground">{res}</span>
-                <button onClick={() => removeResource(i)} className="text-muted-foreground hover:text-destructive transition-colors">
+                <button onClick={() => removeResource(i)} className="text-slate-300 hover:text-rose-400 transition-colors">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -303,10 +334,10 @@ const Index = () => {
                 value={newResource}
                 onChange={(e) => setNewResource(e.target.value)}
                 placeholder="новый ресурс..."
-                className="flex-1 p-3 bg-card border border-muted rounded-2xl text-xs focus:outline-none focus:border-secondary/30"
+                className="flex-1 p-3 bg-white border border-slate-100 rounded-2xl text-xs focus:outline-none focus:border-purple-200"
                 onKeyDown={(e) => e.key === 'Enter' && addResource()}
               />
-              <button onClick={addResource} className="p-3 bg-secondary text-secondary-foreground rounded-2xl active:scale-90 transition-transform">
+              <button onClick={addResource} className="p-3 bg-[#D9FF5F] text-slate-900 rounded-2xl active:scale-90 transition-transform">
                 <Plus size={16} />
               </button>
             </div>
@@ -335,7 +366,7 @@ const Index = () => {
             </div>
             <button
               onClick={() => setEditingMetric(null)}
-              className="w-full py-4 text-xs font-bold uppercase text-muted-foreground hover:text-foreground transition-colors"
+              className="w-full py-4 text-xs font-bold uppercase text-slate-400 hover:text-slate-600 transition-colors"
             >
               Отмена
             </button>
@@ -343,55 +374,184 @@ const Index = () => {
         </div>
       )}
 
-      {/* Point A Modal */}
-      <ModalOverlay isOpen={isPointAModalOpen} onClose={() => setIsPointAModalOpen(false)} title="Аудит 7 вулканов">
-        <div className="space-y-4">
-          {volcanoes.map((v, i) => (
-            <div key={i} className="p-4 card-round bg-muted/30 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-foreground">{v.name}</span>
-                <span className="text-lg font-black text-foreground">{v.value}/10</span>
+      {/* Point A Modal - Аудит 7 вулканов */}
+      {isPointAModalOpen && (
+        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
+          <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Flag size={20} className="text-amber-500" />
+                <h2 className="text-xl font-black text-foreground">Аудит 7 вулканов</h2>
               </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-secondary rounded-full transition-all"
-                  style={{ width: `${(v.value / 10) * 100}%` }}
-                />
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={10}
-                value={v.value}
-                onChange={(e) => {
-                  const updated = [...volcanoes];
-                  updated[i].value = parseInt(e.target.value);
-                  setVolcanoes(updated);
-                }}
-                className="w-full h-1 bg-muted rounded-lg appearance-none cursor-pointer accent-secondary"
-              />
+              <button onClick={() => setIsPointAModalOpen(false)} className="text-slate-300 hover:text-slate-600 p-2">
+                <X size={24} />
+              </button>
             </div>
-          ))}
-        </div>
-      </ModalOverlay>
 
-      {/* Point B Modal */}
-      <ModalOverlay isOpen={isPointBModalOpen} onClose={() => setIsPointBModalOpen(false)} title="Точка Б">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <p className="label-tiny">Достигнуто</p>
-            <p className="text-sm font-medium text-foreground leading-relaxed">{pointB.achieved}</p>
-          </div>
-          <div className="space-y-2">
-            <p className="label-tiny">Не удалось</p>
-            <p className="text-sm font-medium text-foreground leading-relaxed">{pointB.notAchieved}</p>
-          </div>
-          <div className="space-y-2">
-            <p className="label-tiny">Анализ</p>
-            <p className="text-sm font-medium text-foreground leading-relaxed">{pointB.analysis}</p>
+            <p className="text-xs text-muted-foreground font-medium">
+              Оцени свою удовлетворенность сферами жизни от 1 до 10
+            </p>
+
+            <div className="space-y-4">
+              {volcanoes.map((v, i) => (
+                <div key={i} className="p-4 card-round bg-white/50 border border-white/40 space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <VolcanoIcon value={v.value} />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-foreground">{i + 1}. {v.name}</p>
+                    </div>
+                    <span className="text-lg font-black text-foreground">{v.value}</span>
+                  </div>
+
+                  {/* Buttons 1-10 */}
+                  <div className="flex justify-between space-x-0.5">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => updateVolcanoValue(i, num)}
+                        className={`flex-1 min-w-[28px] h-8 rounded-lg text-[10px] font-bold transition-all ${
+                          v.value === num
+                            ? 'bg-amber-500 text-white scale-110 shadow-md'
+                            : 'text-slate-300 hover:bg-slate-50'
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Comment field when value < 8 */}
+                  {v.value < 8 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Что мне нужно добавить, чтобы было 10?
+                      </p>
+                      <div className="relative">
+                        <textarea
+                          value={v.comment}
+                          onChange={(e) => updateVolcanoComment(i, e.target.value)}
+                          placeholder="напишите конкретные шаги..."
+                          rows={3}
+                          className="w-full p-4 pr-12 bg-white border border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-purple-200 resize-none font-medium text-slate-700 leading-relaxed"
+                        />
+                        <button
+                          onClick={() => fixVolcanoComment(i)}
+                          className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
+                            savedStatus === i
+                              ? 'bg-[#D9FF5F] text-[#8EAC24] scale-105'
+                              : 'bg-slate-900 text-white hover:bg-slate-800'
+                          }`}
+                        >
+                          <Check size={14} className={savedStatus === i ? 'animate-in' : ''} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setIsPointAModalOpen(false)}
+              className="w-full py-5 btn-dark"
+            >
+              Завершить аудит
+            </button>
           </div>
         </div>
-      </ModalOverlay>
+      )}
+
+      {/* Point B Modal - Итоги менторства */}
+      {isPointBModalOpen && (
+        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
+          <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Rocket size={20} className="text-purple-600" />
+                <h2 className="text-xl font-black text-foreground">Итоги менторства</h2>
+              </div>
+              <button onClick={() => setIsPointBModalOpen(false)} className="text-slate-300 hover:text-slate-600 p-2">
+                <X size={24} />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground font-medium">
+              Заполняется на итоговой сессии. Анализ достижений и пройденного пути
+            </p>
+
+            <div className="space-y-5">
+              {/* Achieved */}
+              <div className="space-y-2">
+                <p className="label-tiny">Что удалось достичь?</p>
+                <div className="relative">
+                  <textarea
+                    value={resultsB.achieved}
+                    onChange={(e) => setResultsB({ ...resultsB, achieved: e.target.value })}
+                    rows={4}
+                    className="w-full p-4 pr-12 bg-white border border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-purple-200 resize-none font-medium text-slate-700 leading-relaxed shadow-sm transition-all"
+                  />
+                  <button
+                    onClick={() => fixResultB('achieved')}
+                    className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
+                      savedStatusB === 'achieved'
+                        ? 'bg-[#D9FF5F] text-[#8EAC24] scale-105'
+                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Check size={14} className={savedStatusB === 'achieved' ? 'animate-in' : ''} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Failed */}
+              <div className="space-y-2">
+                <p className="label-tiny">Что не получилось и почему?</p>
+                <div className="relative">
+                  <textarea
+                    value={resultsB.notAchieved}
+                    onChange={(e) => setResultsB({ ...resultsB, notAchieved: e.target.value })}
+                    rows={4}
+                    className="w-full p-4 pr-12 bg-white border border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-purple-200 resize-none font-medium text-slate-700 leading-relaxed shadow-sm transition-all"
+                  />
+                  <button
+                    onClick={() => fixResultB('failed')}
+                    className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
+                      savedStatusB === 'failed'
+                        ? 'bg-[#D9FF5F] text-[#8EAC24] scale-105'
+                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Check size={14} className={savedStatusB === 'failed' ? 'animate-in' : ''} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Analysis */}
+              <div className="space-y-2">
+                <p className="label-tiny">Анализ пройденного пути</p>
+                <div className="relative">
+                  <textarea
+                    value={resultsB.analysis}
+                    onChange={(e) => setResultsB({ ...resultsB, analysis: e.target.value })}
+                    rows={4}
+                    className="w-full p-4 pr-12 bg-white border border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-purple-200 resize-none font-medium text-slate-700 leading-relaxed italic shadow-sm transition-all"
+                  />
+                  <button
+                    onClick={() => fixResultB('analysis')}
+                    className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
+                      savedStatusB === 'analysis'
+                        ? 'bg-[#D9FF5F] text-[#8EAC24] scale-105'
+                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    <Check size={14} className={savedStatusB === 'analysis' ? 'animate-in' : ''} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

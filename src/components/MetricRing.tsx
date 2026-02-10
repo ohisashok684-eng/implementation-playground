@@ -32,7 +32,7 @@ const MetricRing = ({ id, metric, onEdit }: MetricRingProps) => {
             cx={40}
             cy={40}
             r={37}
-            stroke="hsl(var(--lime-dark))"
+            stroke="#8EAC24"
             strokeWidth={6}
             strokeDasharray={circumference}
             strokeDashoffset={offset}
