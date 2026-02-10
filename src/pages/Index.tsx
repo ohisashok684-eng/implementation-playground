@@ -23,7 +23,7 @@ import {
 import type { TabId, Goal, DiaryEntry } from '@/types/mentoring';
 
 const Index = () => {
-  const { signOut } = useAuth();
+  const { signOut, profileName } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -185,7 +185,7 @@ const Index = () => {
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div>
             <p className="text-xs text-muted-foreground font-medium">Приветствуем</p>
-            <h1 className="text-xl font-black text-foreground">Александра</h1>
+            <h1 className="text-xl font-black text-foreground">{profileName || 'Пользователь'}</h1>
           </div>
           <button
             onClick={signOut}
