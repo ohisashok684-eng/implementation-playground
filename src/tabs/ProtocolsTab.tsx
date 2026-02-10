@@ -11,7 +11,7 @@ interface ProtocolsTabProps {
 
 const colorMap: Record<string, string> = {
   amber: 'text-amber-500',
-  purple: 'text-secondary',
+  purple: 'text-purple-500',
   blue: 'text-blue-500',
 };
 
