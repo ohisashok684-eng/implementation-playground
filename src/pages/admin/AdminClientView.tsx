@@ -255,7 +255,7 @@ const AdminClientView = () => {
   );
 
   const AddButton = ({ onClick, label }: { onClick: () => void; label: string }) => (
-    <button onClick={onClick} className="flex items-center space-x-1 text-[10px] font-bold text-primary uppercase tracking-wider hover:text-primary/80 transition-colors">
+    <button onClick={onClick} className="flex items-center space-x-1 text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80 transition-colors">
       <Plus size={14} />
       <span>{label}</span>
     </button>
@@ -337,7 +337,7 @@ const AdminClientView = () => {
                   )}
                 </div>
               ))}
-              <button onClick={() => setSessionForm({...sessionForm, steps: [...sessionForm.steps, '']})} className="text-[10px] font-bold text-primary uppercase tracking-wider">+ Ещё шаг</button>
+              <button onClick={() => setSessionForm({...sessionForm, steps: [...sessionForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
             </div>
             <button onClick={handleSaveSession} className="w-full py-4 btn-dark">Сохранить сессию</button>
           </div>
@@ -354,7 +354,7 @@ const AdminClientView = () => {
               <p className="text-sm font-bold text-foreground">{p.title}</p>
               <p className="text-xs text-muted-foreground">{p.description}</p>
               {p.file_name && (
-                <p className="text-[10px] text-primary font-medium">📎 {p.file_name}</p>
+                <p className="text-[10px] text-secondary font-medium">📎 {p.file_name}</p>
               )}
             </div>
           ))
@@ -391,7 +391,7 @@ const AdminClientView = () => {
             <div className="space-y-1">
               <p className="label-tiny">Файл</p>
               <input type="file" ref={fileInputRef} onChange={e => setProtocolForm({...protocolForm, file: e.target.files?.[0] || null})} className="text-xs" />
-              {protocolForm.file && <p className="text-[10px] text-primary font-medium">📎 {protocolForm.file.name}</p>}
+              {protocolForm.file && <p className="text-[10px] text-secondary font-medium">📎 {protocolForm.file.name}</p>}
             </div>
             <button onClick={handleSaveProtocol} className="w-full py-4 btn-dark">Сохранить протокол</button>
           </div>
@@ -414,11 +414,11 @@ const AdminClientView = () => {
               {/* File upload */}
               <div className="flex items-center space-x-2">
                 {r.file_url ? (
-                  <a href={r.file_url} target="_blank" rel="noreferrer" className="text-[10px] text-primary font-medium underline">📎 Файл дорожной карты</a>
+                  <a href={r.file_url} target="_blank" rel="noreferrer" className="text-[10px] text-secondary font-medium underline">📎 Файл дорожной карты</a>
                 ) : (
                   <span className="text-[10px] text-muted-foreground">Файл не загружен</span>
                 )}
-                <label className="cursor-pointer text-[10px] font-bold text-primary uppercase tracking-wider hover:text-primary/80">
+                <label className="cursor-pointer text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80">
                   <Upload size={12} className="inline mr-1" />Загрузить
                   <input type="file" className="hidden" onChange={e => { if (e.target.files?.[0]) handleUploadRoadmapFile(r.id, e.target.files[0]); }} />
                 </label>
@@ -440,14 +440,14 @@ const AdminClientView = () => {
                         className="flex-1 text-xs bg-transparent border-b border-primary/30 focus:outline-none py-1"
                       />
                     ) : (
-                      <span onClick={() => setEditingRoadmap(s.id)} className={`flex-1 text-xs cursor-pointer hover:text-primary transition-colors ${s.done ? 'line-through text-muted-foreground' : 'text-foreground'}`}>{s.text}</span>
+                      <span onClick={() => setEditingRoadmap(s.id)} className={`flex-1 text-xs cursor-pointer hover:text-secondary transition-colors ${s.done ? 'line-through text-muted-foreground' : 'text-foreground'}`}>{s.text}</span>
                     )}
                     {s.deadline && <span className="text-[9px] text-muted-foreground">{s.deadline}</span>}
                     <button onClick={() => handleDeleteStep(s.id)} className="opacity-0 group-hover:opacity-100 text-destructive transition-opacity"><Trash2 size={12} /></button>
                   </div>
                 ))}
               </div>
-              <button onClick={() => handleAddStep(r.id)} className="text-[10px] font-bold text-primary uppercase tracking-wider">+ Добавить шаг</button>
+              <button onClick={() => handleAddStep(r.id)} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Добавить шаг</button>
             </div>
           ))
         )}
