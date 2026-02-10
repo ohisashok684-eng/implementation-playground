@@ -14,16 +14,377 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      diary_entries: {
+        Row: {
+          achievements: string | null
+          created_at: string
+          energy: number | null
+          entry_date: string
+          entry_type: string
+          id: string
+          intent: string | null
+          lessons: string | null
+          next_step: string | null
+          text: string | null
+          user_id: string
+        }
+        Insert: {
+          achievements?: string | null
+          created_at?: string
+          energy?: number | null
+          entry_date: string
+          entry_type?: string
+          id?: string
+          intent?: string | null
+          lessons?: string | null
+          next_step?: string | null
+          text?: string | null
+          user_id: string
+        }
+        Update: {
+          achievements?: string | null
+          created_at?: string
+          energy?: number | null
+          entry_date?: string
+          entry_type?: string
+          id?: string
+          intent?: string | null
+          lessons?: string | null
+          next_step?: string | null
+          text?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      goals: {
+        Row: {
+          amount: string | null
+          created_at: string
+          has_amount: boolean
+          id: string
+          progress: number
+          title: string
+          user_id: string
+        }
+        Insert: {
+          amount?: string | null
+          created_at?: string
+          has_amount?: boolean
+          id?: string
+          progress?: number
+          title: string
+          user_id: string
+        }
+        Update: {
+          amount?: string | null
+          created_at?: string
+          has_amount?: boolean
+          id?: string
+          progress?: number
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      point_b_results: {
+        Row: {
+          achieved: string
+          analysis: string
+          id: string
+          not_achieved: string
+          user_id: string
+        }
+        Insert: {
+          achieved?: string
+          analysis?: string
+          id?: string
+          not_achieved?: string
+          user_id: string
+        }
+        Update: {
+          achieved?: string
+          analysis?: string
+          id?: string
+          not_achieved?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_blocked: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          is_blocked?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          is_blocked?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      progress_metrics: {
+        Row: {
+          current_value: number
+          id: string
+          label: string
+          metric_key: string
+          previous_value: number
+          user_id: string
+        }
+        Insert: {
+          current_value?: number
+          id?: string
+          label: string
+          metric_key: string
+          previous_value?: number
+          user_id: string
+        }
+        Update: {
+          current_value?: number
+          id?: string
+          label?: string
+          metric_key?: string
+          previous_value?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      protocols: {
+        Row: {
+          color: string
+          created_at: string
+          description: string
+          file_name: string
+          file_url: string | null
+          icon: string
+          id: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          description?: string
+          file_name?: string
+          file_url?: string | null
+          icon?: string
+          id?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          description?: string
+          file_name?: string
+          file_url?: string | null
+          icon?: string
+          id?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      roadmap_steps: {
+        Row: {
+          deadline: string | null
+          done: boolean
+          id: string
+          roadmap_id: string
+          sort_order: number
+          text: string
+        }
+        Insert: {
+          deadline?: string | null
+          done?: boolean
+          id?: string
+          roadmap_id: string
+          sort_order?: number
+          text: string
+        }
+        Update: {
+          deadline?: string | null
+          done?: boolean
+          id?: string
+          roadmap_id?: string
+          sort_order?: number
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roadmap_steps_roadmap_id_fkey"
+            columns: ["roadmap_id"]
+            isOneToOne: false
+            referencedRelation: "roadmaps"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roadmaps: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      route_info: {
+        Row: {
+          id: string
+          resources: string[] | null
+          sessions_done: number
+          sessions_total: number
+          time_weeks: number
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          resources?: string[] | null
+          sessions_done?: number
+          sessions_total?: number
+          time_weeks?: number
+          user_id: string
+        }
+        Update: {
+          id?: string
+          resources?: string[] | null
+          sessions_done?: number
+          sessions_total?: number
+          time_weeks?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sessions: {
+        Row: {
+          created_at: string
+          files: string[] | null
+          gradient: string
+          id: string
+          session_date: string
+          session_number: number
+          session_time: string
+          steps: string[] | null
+          summary: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          files?: string[] | null
+          gradient?: string
+          id?: string
+          session_date: string
+          session_number: number
+          session_time: string
+          steps?: string[] | null
+          summary?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          files?: string[] | null
+          gradient?: string
+          id?: string
+          session_date?: string
+          session_number?: number
+          session_time?: string
+          steps?: string[] | null
+          summary?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      volcanoes: {
+        Row: {
+          comment: string
+          id: string
+          name: string
+          user_id: string
+          value: number
+        }
+        Insert: {
+          comment?: string
+          id?: string
+          name: string
+          user_id: string
+          value?: number
+        }
+        Update: {
+          comment?: string
+          id?: string
+          name?: string
+          user_id?: string
+          value?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "super_admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +511,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["super_admin", "user"],
+    },
   },
 } as const
