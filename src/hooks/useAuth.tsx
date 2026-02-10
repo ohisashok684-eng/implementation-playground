@@ -27,47 +27,60 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchRole = async (userId: string) => {
-    const { data } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .maybeSingle();
-    setRole((data?.role as 'super_admin' | 'user') ?? 'user');
+    try {
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle();
+      setRole((data?.role as 'super_admin' | 'user') ?? 'user');
+    } catch (error) {
+      console.error('Error fetching role:', error);
+      setRole('user');
+    }
   };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        // Check if blocked
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_blocked')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-        if (profile?.is_blocked) {
-          await supabase.auth.signOut();
-          setUser(null);
-          setSession(null);
+      try {
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('is_blocked')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+          if (profile?.is_blocked) {
+            await supabase.auth.signOut();
+            setUser(null);
+            setSession(null);
+            setRole(null);
+            return;
+          }
+          await fetchRole(session.user.id);
+        } else {
           setRole(null);
-          setLoading(false);
-          return;
         }
-        await fetchRole(session.user.id);
-      } else {
-        setRole(null);
+      } catch (error) {
+        console.error('Auth state change error:', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchRole(session.user.id);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      try {
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          await fetchRole(session.user.id);
+        }
+      } catch (error) {
+        console.error('Get session error:', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
