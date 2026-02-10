@@ -1,30 +1,78 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sparkles, Target, BookOpen, X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import type { DiaryEntry } from '@/types/mentoring';
 
+interface TrackingQuestion {
+  id: string;
+  question_type: string;
+  question_text: string;
+  field_type: string;
+  sort_order: number;
+}
+
 interface TrackingTabProps {
+  userId: string;
   diaryEntries: DiaryEntry[];
   onSaveDaily: (form: { energy: number; text: string; intent: string }) => void;
   onSaveWeekly: (form: { achievements: string; lessons: string; nextStep: string }) => void;
 }
 
-const TrackingTab = ({ diaryEntries, onSaveDaily, onSaveWeekly }: TrackingTabProps) => {
+const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly }: TrackingTabProps) => {
   const [trackingMode, setTrackingMode] = useState<'daily' | 'weekly' | 'diary'>('daily');
-  const [dailyForm, setDailyForm] = useState({ energy: 5, text: '', intent: '' });
-  const [weeklyForm, setWeeklyForm] = useState({ achievements: '', lessons: '', nextStep: '' });
+  const [dailyQuestions, setDailyQuestions] = useState<TrackingQuestion[]>([]);
+  const [weeklyQuestions, setWeeklyQuestions] = useState<TrackingQuestion[]>([]);
+  const [dailyAnswers, setDailyAnswers] = useState<Record<string, string | number>>({});
+  const [weeklyAnswers, setWeeklyAnswers] = useState<Record<string, string>>({});
   const [viewingEntry, setViewingEntry] = useState<DiaryEntry | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadQuestions();
+  }, [userId]);
+
+  const loadQuestions = async () => {
+    const { data } = await supabase
+      .from('tracking_questions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('sort_order');
+
+    const questions = (data ?? []) as TrackingQuestion[];
+    setDailyQuestions(questions.filter(q => q.question_type === 'daily'));
+    setWeeklyQuestions(questions.filter(q => q.question_type === 'weekly'));
+    setLoading(false);
+  };
 
   const handleSaveDaily = () => {
-    onSaveDaily(dailyForm);
-    setDailyForm({ energy: 5, text: '', intent: '' });
+    // Collect answers into the expected format
+    const textAnswers = Object.values(dailyAnswers).filter(v => typeof v === 'string').join('; ');
+    const energy = Object.values(dailyAnswers).find(v => typeof v === 'number') as number || 5;
+    onSaveDaily({ energy, text: textAnswers, intent: '' });
+    setDailyAnswers({});
     setTrackingMode('diary');
   };
 
   const handleSaveWeekly = () => {
-    onSaveWeekly(weeklyForm);
-    setWeeklyForm({ achievements: '', lessons: '', nextStep: '' });
+    const textAnswers = Object.values(weeklyAnswers);
+    onSaveWeekly({
+      achievements: textAnswers[0] || '',
+      lessons: textAnswers[1] || '',
+      nextStep: textAnswers[2] || '',
+    });
+    setWeeklyAnswers({});
     setTrackingMode('diary');
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const noQuestions = dailyQuestions.length === 0 && weeklyQuestions.length === 0;
 
   return (
     <div className="space-y-4 animate-in">
@@ -54,49 +102,45 @@ const TrackingTab = ({ diaryEntries, onSaveDaily, onSaveWeekly }: TrackingTabPro
             </div>
             <h3 className="text-lg font-bold text-foreground">Ежедневный трекинг</h3>
           </div>
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <p className="label-tiny">Как вы себя чувствуете?</p>
-              <textarea
-                value={dailyForm.text}
-                onChange={(e) => setDailyForm({ ...dailyForm, text: e.target.value })}
-                placeholder="Опишите свое состояние..."
-                rows={3}
-                className="input-glass resize-none"
-              />
+          {dailyQuestions.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Вопросы для ежедневного трекинга пока не добавлены</p>
+          ) : (
+            <div className="space-y-5">
+              {dailyQuestions.map(q => (
+                <div key={q.id} className="space-y-2">
+                  <p className="label-tiny">{q.question_text}</p>
+                  {q.field_type === 'scale' ? (
+                    <div className="flex justify-between space-x-1">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                        <button
+                          key={num}
+                          onClick={() => setDailyAnswers({ ...dailyAnswers, [q.id]: num })}
+                          className={`flex-1 h-8 rounded-lg text-[10px] font-bold transition-all ${
+                            dailyAnswers[q.id] === num
+                              ? 'bg-emerald-500 text-white shadow-md'
+                              : 'bg-card text-muted-foreground'
+                          }`}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <textarea
+                      value={(dailyAnswers[q.id] as string) || ''}
+                      onChange={(e) => setDailyAnswers({ ...dailyAnswers, [q.id]: e.target.value })}
+                      placeholder="Ваш ответ..."
+                      rows={3}
+                      className="input-glass resize-none"
+                    />
+                  )}
+                </div>
+              ))}
+              <button onClick={handleSaveDaily} className="w-full py-5 btn-dark">
+                Зафиксировать день
+              </button>
             </div>
-            <div className="space-y-2">
-              <p className="label-tiny">Намерение на сегодня?</p>
-              <input
-                type="text"
-                value={dailyForm.intent}
-                onChange={(e) => setDailyForm({ ...dailyForm, intent: e.target.value })}
-                placeholder="Главный фокус..."
-                className="input-glass"
-              />
-            </div>
-            <div className="space-y-3">
-              <p className="label-tiny">Уровень энергии</p>
-              <div className="flex justify-between space-x-1">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                  <button
-                    key={num}
-                    onClick={() => setDailyForm({ ...dailyForm, energy: num })}
-                    className={`flex-1 h-8 rounded-lg text-[10px] font-bold transition-all ${
-                      dailyForm.energy === num
-                        ? 'bg-emerald-500 text-white shadow-md'
-                        : 'bg-card text-muted-foreground'
-                    }`}
-                  >
-                    {num}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <button onClick={handleSaveDaily} className="w-full py-5 btn-dark">
-              Зафиксировать день
-            </button>
-          </div>
+          )}
         </section>
       )}
 
@@ -109,41 +153,45 @@ const TrackingTab = ({ diaryEntries, onSaveDaily, onSaveWeekly }: TrackingTabPro
             </div>
             <h3 className="text-lg font-bold text-foreground">Еженедельный трекинг</h3>
           </div>
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <p className="label-tiny">Главные достижения недели?</p>
-              <textarea
-                value={weeklyForm.achievements}
-                onChange={(e) => setWeeklyForm({ ...weeklyForm, achievements: e.target.value })}
-                placeholder="Что удалось реализовать..."
-                rows={3}
-                className="input-glass resize-none"
-              />
+          {weeklyQuestions.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Вопросы для еженедельного трекинга пока не добавлены</p>
+          ) : (
+            <div className="space-y-5">
+              {weeklyQuestions.map(q => (
+                <div key={q.id} className="space-y-2">
+                  <p className="label-tiny">{q.question_text}</p>
+                  {q.field_type === 'scale' ? (
+                    <div className="flex justify-between space-x-1">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                        <button
+                          key={num}
+                          onClick={() => setWeeklyAnswers({ ...weeklyAnswers, [q.id]: String(num) })}
+                          className={`flex-1 h-8 rounded-lg text-[10px] font-bold transition-all ${
+                            weeklyAnswers[q.id] === String(num)
+                              ? 'bg-secondary text-white shadow-md'
+                              : 'bg-card text-muted-foreground'
+                          }`}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <textarea
+                      value={weeklyAnswers[q.id] || ''}
+                      onChange={(e) => setWeeklyAnswers({ ...weeklyAnswers, [q.id]: e.target.value })}
+                      placeholder="Ваш ответ..."
+                      rows={3}
+                      className="input-glass resize-none"
+                    />
+                  )}
+                </div>
+              ))}
+              <button onClick={handleSaveWeekly} className="w-full py-5 btn-dark">
+                Завершить неделю
+              </button>
             </div>
-            <div className="space-y-2">
-              <p className="label-tiny">Уроки и инсайты?</p>
-              <textarea
-                value={weeklyForm.lessons}
-                onChange={(e) => setWeeklyForm({ ...weeklyForm, lessons: e.target.value })}
-                placeholder="Что поняли о себе или бизнесе..."
-                rows={3}
-                className="input-glass resize-none"
-              />
-            </div>
-            <div className="space-y-2">
-              <p className="label-tiny">Главный шаг на следующую неделю?</p>
-              <input
-                type="text"
-                value={weeklyForm.nextStep}
-                onChange={(e) => setWeeklyForm({ ...weeklyForm, nextStep: e.target.value })}
-                placeholder="Приоритетное действие..."
-                className="input-glass"
-              />
-            </div>
-            <button onClick={handleSaveWeekly} className="w-full py-5 btn-dark">
-              Завершить неделю
-            </button>
-          </div>
+          )}
         </section>
       )}
 

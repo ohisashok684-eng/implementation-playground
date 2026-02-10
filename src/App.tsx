@@ -10,7 +10,6 @@ import Auth from "./pages/Auth";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
-import AdminContent from "./pages/admin/AdminContent";
 import AdminClientView from "./pages/admin/AdminClientView";
 import NotFound from "./pages/NotFound";
 
@@ -37,7 +36,6 @@ const App = () => (
             }>
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
-              <Route path="content" element={<AdminContent />} />
               <Route path="clients/:userId" element={<AdminClientView />} />
             </Route>
             <Route path="*" element={<NotFound />} />

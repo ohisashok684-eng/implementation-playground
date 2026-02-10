@@ -245,6 +245,7 @@ export type Database = {
         Row: {
           created_at: string
           description: string
+          file_url: string | null
           id: string
           status: string
           title: string
@@ -253,6 +254,7 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string
+          file_url?: string | null
           id?: string
           status?: string
           title: string
@@ -261,6 +263,7 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string
+          file_url?: string | null
           id?: string
           status?: string
           title?: string
@@ -330,6 +333,33 @@ export type Database = {
           session_time?: string
           steps?: string[] | null
           summary?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tracking_questions: {
+        Row: {
+          field_type: string
+          id: string
+          question_text: string
+          question_type: string
+          sort_order: number
+          user_id: string
+        }
+        Insert: {
+          field_type?: string
+          id?: string
+          question_text: string
+          question_type?: string
+          sort_order?: number
+          user_id: string
+        }
+        Update: {
+          field_type?: string
+          id?: string
+          question_text?: string
+          question_type?: string
+          sort_order?: number
           user_id?: string
         }
         Relationships: []
