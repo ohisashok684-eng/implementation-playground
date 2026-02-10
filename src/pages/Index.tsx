@@ -23,7 +23,7 @@ import {
 import type { TabId, Goal, DiaryEntry } from '@/types/mentoring';
 
 const Index = () => {
-  const { signOut, profileName } = useAuth();
+  const { signOut, profileName, user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -218,6 +218,7 @@ const Index = () => {
         )}
         {activeTab === 'tracking' && (
           <TrackingTab
+            userId={user?.id || ''}
             diaryEntries={diaryEntries}
             onSaveDaily={handleSaveDaily}
             onSaveWeekly={handleSaveWeekly}
