@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { User, Plus, Trash2, X, Flag, Rocket, Check } from 'lucide-react';
+import { User, Plus, Trash2, X, Flag, Rocket, Check, LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 import BottomNav from '@/components/BottomNav';
 import NotificationToast from '@/components/NotificationToast';
 import ModalOverlay from '@/components/ModalOverlay';
@@ -22,6 +23,7 @@ import {
 import type { TabId, Goal, DiaryEntry } from '@/types/mentoring';
 
 const Index = () => {
+  const { signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -185,9 +187,13 @@ const Index = () => {
             <p className="text-xs text-muted-foreground font-medium">Приветствуем</p>
             <h1 className="text-xl font-black text-foreground">Александра</h1>
           </div>
-          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-            <User size={20} className="text-muted-foreground" />
-          </div>
+          <button
+            onClick={signOut}
+            className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-destructive/10 transition-colors"
+            title="Выйти"
+          >
+            <LogOut size={18} className="text-muted-foreground" />
+          </button>
         </div>
       </header>
 
