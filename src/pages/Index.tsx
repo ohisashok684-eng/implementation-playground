@@ -277,18 +277,19 @@ const Index = () => {
     if (!editingMetric || !user) return;
     const metric = progressMetrics[editingMetric];
     const prevValue = metric.current;
+    const metricKey = editingMetric;
     setProgressMetrics((prev) => ({
       ...prev,
-      [editingMetric]: { ...prev[editingMetric], previous: prevValue, current: val },
+      [metricKey]: { ...prev[metricKey], previous: prevValue, current: val },
     }));
+    setEditingMetric(null);
     await supabase.from('progress_metrics').upsert({
       user_id: user.id,
-      metric_key: editingMetric,
+      metric_key: metricKey,
       label: metric.label,
       current_value: val,
       previous_value: prevValue,
     } as any, { onConflict: 'user_id,metric_key' });
-    setEditingMetric(null);
   };
 
   // Volcano handlers
@@ -565,7 +566,11 @@ const Index = () => {
                 <button
                   key={num}
                   onClick={() => updateMetricValue(num)}
-                  className="h-12 rounded-xl flex items-center justify-center font-bold text-sm transition-all bg-muted hover:bg-primary hover:text-primary-foreground active:scale-90 min-w-0"
+                  className={`h-12 rounded-xl flex items-center justify-center font-bold text-sm transition-all active:scale-90 min-w-0 ${
+                    editingMetric && progressMetrics[editingMetric]?.current === num
+                      ? 'bg-primary text-primary-foreground shadow-lg ring-2 ring-primary/30'
+                      : 'bg-muted hover:bg-primary hover:text-primary-foreground'
+                  }`}
                 >
                   {num}
                 </button>
