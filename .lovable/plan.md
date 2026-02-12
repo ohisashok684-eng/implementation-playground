@@ -1,77 +1,32 @@
 
-
-## Загрузка данных из базы на стороне пользователя
+## Исправление доступа к файлам для пользователя
 
 ### Проблема
+1. **Протоколы**: Кнопка "Открыть файл" в протоколах не открывает реальный файл -- она просто показывает уведомление. Файл из базы данных (`file_url`) не передаётся в компонент.
+2. **Админка -- ссылки на файлы дорожных карт**: В админке ссылка на файл карты использует `file_url` напрямую как URL, но бакет приватный, поэтому ссылка не работает.
+3. **Старые данные**: Некоторые протоколы в базе хранят полный публичный URL вместо относительного пути -- их нужно исправить.
 
-Страница пользователя (`Index.tsx`) использует захардкоженные начальные данные из `initialData.ts` (пустые массивы). Данные, добавленные админом в базу (сессии, протоколы, дорожные карты и т.д.), никогда не загружаются на стороне клиента.
+### Что будет сделано
 
-Единственное исключение -- вопросы "Точка Б", которые уже загружаются из БД.
+**1. Протоколы -- пользовательская часть**
+- Добавить поле `fileUrl` в тип `Protocol` (`src/types/mentoring.ts`)
+- В `Index.tsx` при загрузке протоколов маппить `file_url` в `fileUrl`
+- Переписать `ProtocolsTab.tsx`: убрать фиктивный `handleOpenFile`, добавить реальное открытие файла через подписанные ссылки (временные ссылки с ограниченным сроком действия, которые безопасно дают доступ к файлу на 1 час)
+- Кнопка "Открыть файл" будет работать только если к протоколу прикреплён файл
 
-### Решение
+**2. Админка -- ссылки на файлы дорожных карт**
+- В `AdminClientView.tsx` заменить прямую ссылку `<a href={r.file_url}>` на кнопку, которая генерирует подписанную ссылку и открывает файл
 
-Добавить в `Index.tsx` загрузку всех данных из базы при авторизации пользователя (`useEffect` по `user.id`), аналогично тому, как это сделано для Point B.
-
-### Таблицы для загрузки
-
-| Данные | Таблица | Маппинг в стейт |
-|--------|---------|-----------------|
-| Цели | `goals` | `setGoals` |
-| Сессии | `sessions` | `setSessions` (убрать `const`, сделать `useState`) |
-| Протоколы | `protocols` | `setProtocols` |
-| Дорожные карты | `roadmaps` + `roadmap_steps` | `setRoadmaps` |
-| Вулканы | `volcanoes` | `setVolcanoes` |
-| Метрики | `progress_metrics` | `setProgressMetrics` |
-| Маршрут | `route_info` | `setRouteInfo` |
-| Дневник | `diary_entries` | `setDiaryEntries` |
-
-### Изменения в файлах
-
-**`src/pages/Index.tsx`**:
-1. Добавить `useEffect` с загрузкой всех данных из Supabase по `user.id`
-2. Сделать `sessions` изменяемым (`useState` вместо `const`)
-3. Маппить данные из БД в формат, ожидаемый компонентами (например, `session_number` -> `number`, `session_date` -> `date`)
-4. Если данных в БД нет -- оставлять начальные значения (fallback)
-5. Обновить функции сохранения (goals, volcanoes, metrics, route_info, diary) чтобы они писали в БД, а не только в локальный стейт
+**3. Очистка старых данных**
+- SQL-миграция для исправления старых записей протоколов, где `file_url` содержит полный URL вместо относительного пути
 
 ### Технические детали
 
-Загрузка данных:
+**Файлы для изменения:**
+- `src/types/mentoring.ts` -- добавить `fileUrl?: string` в `Protocol`
+- `src/pages/Index.tsx` -- маппинг `file_url` -> `fileUrl` для протоколов
+- `src/tabs/ProtocolsTab.tsx` -- реальное открытие файлов через `supabase.storage.from('mentoring-files').createSignedUrl(path, 3600)`
+- `src/pages/admin/AdminClientView.tsx` -- исправить ссылку на файл дорожной карты
 
-```text
-useEffect(() => {
-  if (!user) return;
-  const load = async () => {
-    // Параллельная загрузка всех таблиц
-    const [goalsRes, sessionsRes, protocolsRes, ...] = await Promise.all([
-      supabase.from('goals').select('*').eq('user_id', user.id),
-      supabase.from('sessions').select('*').eq('user_id', user.id).order('session_number'),
-      supabase.from('protocols').select('*').eq('user_id', user.id),
-      supabase.from('roadmaps').select('*, roadmap_steps(*)').eq('user_id', user.id),
-      supabase.from('volcanoes').select('*').eq('user_id', user.id),
-      supabase.from('progress_metrics').select('*').eq('user_id', user.id),
-      supabase.from('route_info').select('*').eq('user_id', user.id).maybeSingle(),
-      supabase.from('diary_entries').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-    ]);
-    // Маппинг и установка в стейт
-  };
-  load();
-}, [user]);
-```
-
-Маппинг данных из БД в типы приложения:
-
-```text
-// Сессии: session_number -> number, session_date -> date и т.д.
-// Протоколы: description -> desc, file_name -> fileName
-// Дорожные карты: roadmap_steps -> steps (с маппингом полей)
-// Метрики: массив -> Record<string, ProgressMetric>
-// Route info: sessions_total -> sessionsTotal и т.д.
-```
-
-Сохранение данных в БД (upsert/insert при изменениях):
-- Goals: upsert при сохранении, delete при удалении
-- Volcanoes: upsert при фиксации комментария
-- Metrics: upsert при изменении значения
-- Route info: upsert при сохранении маршрута
-- Diary: insert при создании записи
+**SQL-миграция:**
+- Обновить `protocols.file_url` -- извлечь относительный путь из полных URL
