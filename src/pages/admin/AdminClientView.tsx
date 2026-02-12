@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Target, Map, Heart, FileText, Zap, Flag, Plus, Trash2, X, Upload, Check, Edit2, MessageSquare, GripVertical, Rocket } from 'lucide-react';
+import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Upload, Check, Edit2, MessageSquare, Rocket } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -316,7 +316,23 @@ const AdminClientView = () => {
         </div>
       </div>
 
-      {/* ========== SESSIONS ========== */}
+      {/* ========== GOALS (read-only) ========== */}
+      <Section title="Цели клиента" icon={Target}>
+        {goals.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Целей пока нет</p>
+        ) : (
+          goals.map((g) => (
+            <div key={g.id} className="glass card-round p-3 space-y-1">
+              <p className="text-sm font-bold text-foreground">{g.title}</p>
+              {g.has_amount && <p className="text-xs text-muted-foreground">Цель: {g.amount} ₽</p>}
+              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full" style={{ width: `${g.progress}%` }} />
+              </div>
+            </div>
+          ))
+        )}
+      </Section>
+
       <Section title="Сессии" icon={FileText} action={<AddButton onClick={() => setShowSessionForm(true)} label="Добавить" />}>
         {sessions.length === 0 ? (
           <p className="text-xs text-muted-foreground">Сессий нет</p>
@@ -335,6 +351,35 @@ const AdminClientView = () => {
                   ))}
                 </div>
               )}
+              {s.files?.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  {s.files.map((fileUrl: string, i: number) => (
+                    <a key={i} href={fileUrl} target="_blank" rel="noreferrer" className="text-[10px] text-secondary font-medium underline block">
+                      📎 Файл {i + 1}
+                    </a>
+                  ))}
+                </div>
+              )}
+              <label className="cursor-pointer inline-flex items-center space-x-1 text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80 transition-colors pt-1">
+                <Upload size={12} />
+                <span>Загрузить файл</span>
+                <input type="file" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !userId) return;
+                  const ext = file.name.split('.').pop();
+                  const path = `${userId}/sessions/${s.id}/${Date.now()}.${ext}`;
+                  const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, file);
+                  if (upErr) {
+                    toast({ title: 'Ошибка загрузки', description: upErr.message, variant: 'destructive' });
+                    return;
+                  }
+                  const { data: urlData } = supabase.storage.from('mentoring-files').getPublicUrl(path);
+                  const currentFiles = s.files || [];
+                  await supabase.from('sessions').update({ files: [...currentFiles, urlData.publicUrl] } as any).eq('id', s.id);
+                  toast({ title: 'Файл загружен' });
+                  loadClientData(userId);
+                }} />
+              </label>
             </div>
           ))
         )}
@@ -658,75 +703,7 @@ const AdminClientView = () => {
         </div>
       )}
 
-      {/* ========== READ-ONLY SECTIONS ========== */}
-
-      {/* Goals */}
-      <Section title="Цели" icon={Target}>
-        {goals.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Целей пока нет</p>
-        ) : (
-          goals.map((g) => (
-            <div key={g.id} className="glass card-round p-3 space-y-1">
-              <p className="text-sm font-bold text-foreground">{g.title}</p>
-              {g.has_amount && <p className="text-xs text-muted-foreground">Цель: {g.amount} ₽</p>}
-              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full" style={{ width: `${g.progress}%` }} />
-              </div>
-            </div>
-          ))
-        )}
-      </Section>
-
-      {/* Volcanoes */}
-      <Section title="Аудит вулканов" icon={Flag}>
-        {volcanoes.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Аудит не заполнен</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {volcanoes.map((v) => (
-              <div key={v.id} className="glass card-round p-3">
-                <p className="text-xs font-bold text-foreground">{v.name}</p>
-                <p className="text-lg font-black text-foreground">{v.value}<span className="text-[10px] text-muted-foreground">/10</span></p>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
-      {/* Metrics */}
-      <Section title="Метрики состояния" icon={Heart}>
-        {metrics.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Метрик нет</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {metrics.map((m) => (
-              <div key={m.id} className="glass card-round p-3">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{m.label}</p>
-                <p className="text-lg font-black text-foreground">{m.current_value}</p>
-                <p className="text-[10px] text-muted-foreground">было: {m.previous_value}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
-      {/* Diary */}
-      <Section title="Дневник" icon={Zap}>
-        {diaryEntries.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Записей нет</p>
-        ) : (
-          diaryEntries.map((d) => (
-            <div key={d.id} className="glass card-round p-3 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-secondary uppercase">{d.entry_type === 'daily' ? 'День' : 'Неделя'}</span>
-                <span className="text-[10px] text-muted-foreground">{d.entry_date}</span>
-              </div>
-              {d.text && <p className="text-xs text-foreground">{d.text}</p>}
-              {d.achievements && <p className="text-xs text-foreground">{d.achievements}</p>}
-            </div>
-          ))
-        )}
-      </Section>
+      {/* Removed: Volcanoes, Metrics, Diary — private to user */}
     </div>
   );
 };
