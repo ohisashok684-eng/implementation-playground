@@ -22,7 +22,7 @@ const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
-              className={`flex flex-col items-center justify-center p-3 rounded-3xl transition-all duration-300 min-w-[75px] ${
+              className={`flex flex-col items-center justify-center p-3 rounded-3xl transition-all duration-300 min-w-0 flex-1 ${
                 activeTab === item.id
                   ? 'bg-primary text-primary-foreground shadow-xl shadow-lime-glow scale-105'
                   : 'text-muted-foreground hover:text-foreground'
