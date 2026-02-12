@@ -63,6 +63,195 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const url = new URL(req.url);
+    const action = url.searchParams.get("action");
+    const body = req.method === "POST" ? await req.json() : {};
+
+    // Setup doesn't require authentication
+    if (action === "setup") {
+      const pool = getPool();
+      const conn = await pool.connect();
+
+      try {
+        const ddl = `
+          CREATE SCHEMA IF NOT EXISTS ${SCHEMA};
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.goals (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            title TEXT NOT NULL,
+            amount TEXT,
+            has_amount BOOLEAN NOT NULL DEFAULT false,
+            progress INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.sessions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            session_number INTEGER NOT NULL,
+            session_date TEXT NOT NULL,
+            session_time TEXT NOT NULL,
+            summary TEXT NOT NULL DEFAULT '',
+            steps TEXT[] DEFAULT '{}',
+            files TEXT[] DEFAULT '{}',
+            gradient TEXT NOT NULL DEFAULT 'from-lime to-lime-dark',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.protocols (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            icon TEXT NOT NULL DEFAULT 'zap',
+            color TEXT NOT NULL DEFAULT 'amber',
+            file_name TEXT NOT NULL DEFAULT '',
+            file_url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.roadmaps (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'В работе',
+            file_url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.roadmap_steps (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            roadmap_id UUID NOT NULL REFERENCES ${SCHEMA}.roadmaps(id) ON DELETE CASCADE,
+            text TEXT NOT NULL,
+            done BOOLEAN NOT NULL DEFAULT false,
+            deadline DATE,
+            sort_order INTEGER NOT NULL DEFAULT 0
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.volcanoes (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            name TEXT NOT NULL,
+            value INTEGER NOT NULL DEFAULT 0,
+            comment TEXT NOT NULL DEFAULT ''
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.progress_metrics (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            metric_key TEXT NOT NULL,
+            label TEXT NOT NULL,
+            current_value INTEGER NOT NULL DEFAULT 0,
+            previous_value INTEGER NOT NULL DEFAULT 0
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.route_info (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            sessions_total INTEGER NOT NULL DEFAULT 8,
+            sessions_done INTEGER NOT NULL DEFAULT 0,
+            time_weeks INTEGER NOT NULL DEFAULT 12,
+            resources TEXT[] DEFAULT '{}'
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.diary_entries (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            entry_type TEXT NOT NULL DEFAULT 'daily',
+            entry_date TEXT NOT NULL,
+            energy INTEGER,
+            text TEXT,
+            intent TEXT,
+            achievements TEXT,
+            lessons TEXT,
+            next_step TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.tracking_questions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            question_type TEXT NOT NULL DEFAULT 'daily',
+            question_text TEXT NOT NULL,
+            field_type TEXT NOT NULL DEFAULT 'text',
+            sort_order INTEGER NOT NULL DEFAULT 0
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.point_b_questions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            question_text TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.point_b_answers (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            question_id UUID NOT NULL,
+            answer_text TEXT NOT NULL DEFAULT ''
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.point_b_results (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL,
+            achieved TEXT NOT NULL DEFAULT '',
+            analysis TEXT NOT NULL DEFAULT '',
+            not_achieved TEXT NOT NULL DEFAULT ''
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.profiles (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL UNIQUE,
+            email TEXT NOT NULL DEFAULT '',
+            full_name TEXT NOT NULL DEFAULT '',
+            avatar_url TEXT,
+            is_blocked BOOLEAN NOT NULL DEFAULT false,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS ${SCHEMA}.user_roles (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL UNIQUE,
+            role TEXT NOT NULL DEFAULT 'user'
+          );
+
+          -- Add unique constraints if not exist
+          DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_volcanoes_user_name') THEN
+              ALTER TABLE ${SCHEMA}.volcanoes ADD CONSTRAINT uq_volcanoes_user_name UNIQUE (user_id, name);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_metrics_user_key') THEN
+              ALTER TABLE ${SCHEMA}.progress_metrics ADD CONSTRAINT uq_metrics_user_key UNIQUE (user_id, metric_key);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_route_user') THEN
+              ALTER TABLE ${SCHEMA}.route_info ADD CONSTRAINT uq_route_user UNIQUE (user_id);
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_pb_answers_user_q') THEN
+              ALTER TABLE ${SCHEMA}.point_b_answers ADD CONSTRAINT uq_pb_answers_user_q UNIQUE (user_id, question_id);
+            END IF;
+          END $$;
+        `;
+        await conn.queryArray(ddl);
+        const result = { success: true, message: "Schema created" };
+        conn.release();
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (error: unknown) {
+        conn.release();
+        const message = error instanceof Error ? error.message : "Unknown error";
+        console.error("Setup error:", message);
+        return new Response(JSON.stringify({ error: message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // All other actions require authentication
     const userId = await getUser(req);
     if (!userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -71,10 +260,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    const url = new URL(req.url);
-    const action = url.searchParams.get("action");
-    const body = req.method === "POST" ? await req.json() : {};
-
     const pool = getPool();
     const conn = await pool.connect();
 
@@ -82,174 +267,6 @@ Deno.serve(async (req) => {
       let result: any;
 
       switch (action) {
-        // ===== SETUP =====
-        case "setup": {
-          await conn.queryArray(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
-
-          const ddl = `
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.goals (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              title TEXT NOT NULL,
-              amount TEXT,
-              has_amount BOOLEAN NOT NULL DEFAULT false,
-              progress INTEGER NOT NULL DEFAULT 0,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.sessions (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              session_number INTEGER NOT NULL,
-              session_date TEXT NOT NULL,
-              session_time TEXT NOT NULL,
-              summary TEXT NOT NULL DEFAULT '',
-              steps TEXT[] DEFAULT '{}',
-              files TEXT[] DEFAULT '{}',
-              gradient TEXT NOT NULL DEFAULT 'from-lime to-lime-dark',
-              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.protocols (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              title TEXT NOT NULL,
-              description TEXT NOT NULL DEFAULT '',
-              icon TEXT NOT NULL DEFAULT 'zap',
-              color TEXT NOT NULL DEFAULT 'amber',
-              file_name TEXT NOT NULL DEFAULT '',
-              file_url TEXT,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.roadmaps (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              title TEXT NOT NULL,
-              description TEXT NOT NULL DEFAULT '',
-              status TEXT NOT NULL DEFAULT 'В работе',
-              file_url TEXT,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.roadmap_steps (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              roadmap_id UUID NOT NULL REFERENCES ${SCHEMA}.roadmaps(id) ON DELETE CASCADE,
-              text TEXT NOT NULL,
-              done BOOLEAN NOT NULL DEFAULT false,
-              deadline DATE,
-              sort_order INTEGER NOT NULL DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.volcanoes (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              name TEXT NOT NULL,
-              value INTEGER NOT NULL DEFAULT 0,
-              comment TEXT NOT NULL DEFAULT ''
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.progress_metrics (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              metric_key TEXT NOT NULL,
-              label TEXT NOT NULL,
-              current_value INTEGER NOT NULL DEFAULT 0,
-              previous_value INTEGER NOT NULL DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.route_info (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              sessions_total INTEGER NOT NULL DEFAULT 8,
-              sessions_done INTEGER NOT NULL DEFAULT 0,
-              time_weeks INTEGER NOT NULL DEFAULT 12,
-              resources TEXT[] DEFAULT '{}'
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.diary_entries (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              entry_type TEXT NOT NULL DEFAULT 'daily',
-              entry_date TEXT NOT NULL,
-              energy INTEGER,
-              text TEXT,
-              intent TEXT,
-              achievements TEXT,
-              lessons TEXT,
-              next_step TEXT,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.tracking_questions (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              question_type TEXT NOT NULL DEFAULT 'daily',
-              question_text TEXT NOT NULL,
-              field_type TEXT NOT NULL DEFAULT 'text',
-              sort_order INTEGER NOT NULL DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.point_b_questions (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              question_text TEXT NOT NULL,
-              sort_order INTEGER NOT NULL DEFAULT 0
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.point_b_answers (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              question_id UUID NOT NULL,
-              answer_text TEXT NOT NULL DEFAULT ''
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.point_b_results (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL,
-              achieved TEXT NOT NULL DEFAULT '',
-              analysis TEXT NOT NULL DEFAULT '',
-              not_achieved TEXT NOT NULL DEFAULT ''
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.profiles (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL UNIQUE,
-              email TEXT NOT NULL DEFAULT '',
-              full_name TEXT NOT NULL DEFAULT '',
-              avatar_url TEXT,
-              is_blocked BOOLEAN NOT NULL DEFAULT false,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-              updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-
-            CREATE TABLE IF NOT EXISTS ${SCHEMA}.user_roles (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id UUID NOT NULL UNIQUE,
-              role TEXT NOT NULL DEFAULT 'user'
-            );
-
-            -- Add unique constraints if not exist
-            DO $$ BEGIN
-              IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_volcanoes_user_name') THEN
-                ALTER TABLE ${SCHEMA}.volcanoes ADD CONSTRAINT uq_volcanoes_user_name UNIQUE (user_id, name);
-              END IF;
-              IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_metrics_user_key') THEN
-                ALTER TABLE ${SCHEMA}.progress_metrics ADD CONSTRAINT uq_metrics_user_key UNIQUE (user_id, metric_key);
-              END IF;
-              IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_route_user') THEN
-                ALTER TABLE ${SCHEMA}.route_info ADD CONSTRAINT uq_route_user UNIQUE (user_id);
-              END IF;
-              IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_pb_answers_user_q') THEN
-                ALTER TABLE ${SCHEMA}.point_b_answers ADD CONSTRAINT uq_pb_answers_user_q UNIQUE (user_id, question_id);
-              END IF;
-            END $$;
-          `;
-          await conn.queryArray(ddl);
-          result = { success: true, message: "Schema created" };
-          break;
-        }
-
         // ===== SELECT =====
         case "select": {
           const { table, filters, order, single } = body;
