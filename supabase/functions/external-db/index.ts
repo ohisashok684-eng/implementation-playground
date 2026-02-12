@@ -61,6 +61,33 @@ async function getUser(req: Request): Promise<string | null> {
   }
 }
 
+// Check admin role via Supabase (not external DB)
+async function isAdmin(req: Request, userId: string): Promise<boolean> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!supabaseUrl || !supabaseKey) return false;
+
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader) return false;
+
+  try {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/user_roles?user_id=eq.${userId}&role=eq.super_admin&select=role`,
+      {
+        headers: {
+          Authorization: authHeader,
+          apikey: supabaseKey,
+        },
+      }
+    );
+    if (!res.ok) return false;
+    const data = await res.json();
+    return Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -433,13 +460,7 @@ Deno.serve(async (req) => {
 
         // ===== ADMIN SELECT (for super_admin) =====
         case "admin_select": {
-          // Check if user is super_admin
-          const roleRes = await conn.queryObject(
-            `SELECT role FROM ${SCHEMA}.user_roles WHERE user_id = $1`,
-            [userId]
-          );
-          const isAdmin = (roleRes.rows as any[])[0]?.role === "super_admin";
-          if (!isAdmin) {
+          if (!(await isAdmin(req, userId))) {
             throw new Error("Forbidden: not an admin");
           }
 
@@ -493,12 +514,7 @@ Deno.serve(async (req) => {
 
         // ===== ADMIN UPDATE =====
         case "admin_update": {
-          const roleRes = await conn.queryObject(
-            `SELECT role FROM ${SCHEMA}.user_roles WHERE user_id = $1`,
-            [userId]
-          );
-          const isAdmin = (roleRes.rows as any[])[0]?.role === "super_admin";
-          if (!isAdmin) {
+          if (!(await isAdmin(req, userId))) {
             throw new Error("Forbidden: not an admin");
           }
 
@@ -530,12 +546,7 @@ Deno.serve(async (req) => {
 
         // ===== ADMIN INSERT =====
         case "admin_insert": {
-          const roleRes = await conn.queryObject(
-            `SELECT role FROM ${SCHEMA}.user_roles WHERE user_id = $1`,
-            [userId]
-          );
-          const isAdmin = (roleRes.rows as any[])[0]?.role === "super_admin";
-          if (!isAdmin) {
+          if (!(await isAdmin(req, userId))) {
             throw new Error("Forbidden: not an admin");
           }
 
@@ -554,12 +565,7 @@ Deno.serve(async (req) => {
 
         // ===== ADMIN DELETE =====
         case "admin_delete": {
-          const roleRes = await conn.queryObject(
-            `SELECT role FROM ${SCHEMA}.user_roles WHERE user_id = $1`,
-            [userId]
-          );
-          const isAdmin = (roleRes.rows as any[])[0]?.role === "super_admin";
-          if (!isAdmin) {
+          if (!(await isAdmin(req, userId))) {
             throw new Error("Forbidden: not an admin");
           }
 
@@ -584,12 +590,7 @@ Deno.serve(async (req) => {
 
         // ===== ADMIN UPSERT =====
         case "admin_upsert": {
-          const roleRes = await conn.queryObject(
-            `SELECT role FROM ${SCHEMA}.user_roles WHERE user_id = $1`,
-            [userId]
-          );
-          const isAdmin = (roleRes.rows as any[])[0]?.role === "super_admin";
-          if (!isAdmin) {
+          if (!(await isAdmin(req, userId))) {
             throw new Error("Forbidden: not an admin");
           }
 
