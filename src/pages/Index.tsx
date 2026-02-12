@@ -565,7 +565,7 @@ const Index = () => {
                 <button
                   key={num}
                   onClick={() => updateMetricValue(num)}
-                  className="h-12 rounded-xl flex items-center justify-center font-bold text-sm transition-all bg-muted hover:bg-primary hover:text-primary-foreground active:scale-90"
+                  className="h-12 rounded-xl flex items-center justify-center font-bold text-sm transition-all bg-muted hover:bg-primary hover:text-primary-foreground active:scale-90 min-w-0"
                 >
                   {num}
                 </button>
@@ -611,14 +611,14 @@ const Index = () => {
                   </div>
 
                   {/* Buttons 1-10 */}
-                  <div className="flex justify-between space-x-0.5">
+                  <div className="grid grid-cols-10 gap-0.5">
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                       <button
                         key={num}
                         onClick={() => updateVolcanoValue(i, num)}
-                        className={`flex-1 min-w-[28px] h-8 rounded-lg text-[10px] font-bold transition-all ${
+                        className={`h-8 rounded-lg text-[10px] font-bold transition-all ${
                           v.value === num
-                            ? 'bg-amber-500 text-white scale-110 shadow-md'
+                            ? 'bg-amber-500 text-white scale-110 shadow-md z-10'
                             : 'text-slate-300 hover:bg-slate-50'
                         }`}
                       >

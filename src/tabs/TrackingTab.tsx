@@ -110,12 +110,12 @@ const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly }: Tracki
                 <div key={q.id} className="space-y-2">
                   <p className="label-tiny">{q.question_text}</p>
                   {q.field_type === 'scale' ? (
-                    <div className="flex justify-between space-x-1">
+                    <div className="grid grid-cols-10 gap-0.5">
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                         <button
                           key={num}
                           onClick={() => setDailyAnswers({ ...dailyAnswers, [q.id]: num })}
-                          className={`flex-1 h-8 rounded-lg text-[10px] font-bold transition-all ${
+                          className={`h-8 rounded-lg text-[10px] font-bold transition-all ${
                             dailyAnswers[q.id] === num
                               ? 'bg-emerald-500 text-white shadow-md'
                               : 'bg-card text-muted-foreground'
@@ -161,12 +161,12 @@ const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly }: Tracki
                 <div key={q.id} className="space-y-2">
                   <p className="label-tiny">{q.question_text}</p>
                   {q.field_type === 'scale' ? (
-                    <div className="flex justify-between space-x-1">
+                    <div className="grid grid-cols-10 gap-0.5">
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                         <button
                           key={num}
                           onClick={() => setWeeklyAnswers({ ...weeklyAnswers, [q.id]: String(num) })}
-                          className={`flex-1 h-8 rounded-lg text-[10px] font-bold transition-all ${
+                          className={`h-8 rounded-lg text-[10px] font-bold transition-all ${
                             weeklyAnswers[q.id] === String(num)
                               ? 'bg-secondary text-white shadow-md'
                               : 'bg-card text-muted-foreground'
