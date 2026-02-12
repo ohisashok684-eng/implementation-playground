@@ -15,6 +15,8 @@ function getPool() {
   const password = Deno.env.get("POSTGRESQL_PASSWORD");
   const database = Deno.env.get("POSTGRESQL_DBNAME");
 
+  console.log("DB connection config:", { host, port, user, database, hasPwd: !!password });
+
   if (!host || !user || !password || !database) {
     throw new Error("External DB credentials not configured");
   }
