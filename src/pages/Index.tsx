@@ -48,7 +48,7 @@ const Index = () => {
 
   // Modal states
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
-  const [editingGoalId, setEditingGoalId] = useState<number | null>(null);
+  const [editingGoalId, setEditingGoalId] = useState<string | number | null>(null);
   const [tempGoal, setTempGoal] = useState<Goal>({ id: 0, title: '', amount: '', hasAmount: false, progress: 0 });
 
   const [isRouteModalOpen, setIsRouteModalOpen] = useState(false);
@@ -218,7 +218,7 @@ const Index = () => {
         amount: tempGoal.amount,
         has_amount: tempGoal.hasAmount,
         progress: tempGoal.progress,
-      }).eq('id', editingGoalId);
+      }).eq('id', String(editingGoalId));
     } else {
       const { data } = await supabase.from('goals').insert({
         user_id: user.id,
@@ -234,9 +234,9 @@ const Index = () => {
     setIsGoalModalOpen(false);
   };
 
-  const deleteGoal = async (id: number) => {
+  const deleteGoal = async (id: string | number) => {
     setGoals(goals.filter((g) => g.id !== id));
-    await supabase.from('goals').delete().eq('id', id);
+    await supabase.from('goals').delete().eq('id', String(id));
     setIsGoalModalOpen(false);
   };
 
