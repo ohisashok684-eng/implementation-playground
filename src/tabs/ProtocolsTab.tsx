@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Zap, Pencil, ExternalLink, FileText, Upload } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import ModalOverlay from '@/components/ModalOverlay';
 import type { Protocol } from '@/types/mentoring';
 
@@ -41,12 +42,21 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
     setIsModalOpen(false);
   };
 
-  const handleOpenFile = (fileName: string) => {
-    if (!fileName) {
-      onNotify({ type: 'error', message: 'К этому протоколу не прикреплен файл' });
+  const handleOpenFile = async (protocol: Protocol) => {
+    const filePath = protocol.fileUrl;
+    if (!filePath) {
+      onNotify({ type: 'error', message: 'К этому протоколу не прикреплён файл' });
       return;
     }
-    onNotify({ type: 'success', message: `Открываем файл «${fileName}»...` });
+    onNotify({ type: 'success', message: 'Открываем файл...' });
+    const { data, error } = await supabase.storage
+      .from('mentoring-files')
+      .createSignedUrl(filePath, 3600);
+    if (error || !data?.signedUrl) {
+      onNotify({ type: 'error', message: 'Не удалось получить ссылку на файл' });
+      return;
+    }
+    window.open(data.signedUrl, '_blank');
   };
 
   return (
@@ -71,9 +81,10 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
             </button>
           </div>
           <button
-            onClick={() => handleOpenFile(p.fileName)}
+            onClick={() => handleOpenFile(p)}
+            disabled={!p.fileUrl}
             className={`w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg ${
-              p.fileName
+              p.fileUrl
                 ? 'bg-foreground text-white'
                 : 'bg-muted text-muted-foreground cursor-not-allowed'
             }`}

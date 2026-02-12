@@ -532,8 +532,11 @@ const AdminClientView = () => {
 
               {/* File upload */}
               <div className="flex items-center space-x-2">
-                {r.file_url ? (
-                  <a href={r.file_url} target="_blank" rel="noreferrer" className="text-[10px] text-secondary font-medium underline">📎 Файл дорожной карты</a>
+              {r.file_url ? (
+                  <button onClick={async () => {
+                    const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(r.file_url, 3600);
+                    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                  }} className="text-[10px] text-secondary font-medium underline bg-transparent border-none p-0 cursor-pointer">📎 Файл дорожной карты</button>
                 ) : (
                   <span className="text-[10px] text-muted-foreground">Файл не загружен</span>
                 )}

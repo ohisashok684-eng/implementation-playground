@@ -13,6 +13,7 @@ export interface Protocol {
   icon: string;
   color: string;
   fileName: string;
+  fileUrl?: string;
 }
 
 export interface Session {
