@@ -110,6 +110,7 @@ const Index = () => {
           icon: p.icon,
           color: p.color,
           fileName: p.file_name,
+          fileUrl: p.file_url || undefined,
         })));
       }
 
