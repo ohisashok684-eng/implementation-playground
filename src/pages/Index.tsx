@@ -209,17 +209,34 @@ const Index = () => {
     setIsGoalModalOpen(true);
   };
 
-  const handleSaveGoal = () => {
+  const handleSaveGoal = async () => {
+    if (!user) return;
     if (editingGoalId) {
       setGoals(goals.map((g) => (g.id === editingGoalId ? { ...tempGoal } : g)));
+      await supabase.from('goals').update({
+        title: tempGoal.title,
+        amount: tempGoal.amount,
+        has_amount: tempGoal.hasAmount,
+        progress: tempGoal.progress,
+      }).eq('id', editingGoalId);
     } else {
-      setGoals([...goals, { ...tempGoal, id: Date.now() }]);
+      const { data } = await supabase.from('goals').insert({
+        user_id: user.id,
+        title: tempGoal.title,
+        amount: tempGoal.amount,
+        has_amount: tempGoal.hasAmount,
+        progress: tempGoal.progress,
+      }).select().single();
+      if (data) {
+        setGoals([...goals, { ...tempGoal, id: data.id }]);
+      }
     }
     setIsGoalModalOpen(false);
   };
 
-  const deleteGoal = (id: number) => {
+  const deleteGoal = async (id: number) => {
     setGoals(goals.filter((g) => g.id !== id));
+    await supabase.from('goals').delete().eq('id', id);
     setIsGoalModalOpen(false);
   };
 
@@ -229,8 +246,16 @@ const Index = () => {
     setIsRouteModalOpen(true);
   };
 
-  const saveRoute = () => {
+  const saveRoute = async () => {
+    if (!user) return;
     setRouteInfo({ ...tempRoute });
+    await supabase.from('route_info').upsert({
+      user_id: user.id,
+      sessions_total: tempRoute.sessionsTotal,
+      sessions_done: tempRoute.sessionsDone,
+      time_weeks: tempRoute.timeWeeks,
+      resources: tempRoute.resources,
+    } as any, { onConflict: 'user_id' });
     setIsRouteModalOpen(false);
   };
 
@@ -246,13 +271,21 @@ const Index = () => {
   };
 
   // Metric handler
-  const updateMetricValue = (val: number) => {
-    if (!editingMetric) return;
-    const prevValue = progressMetrics[editingMetric].current;
+  const updateMetricValue = async (val: number) => {
+    if (!editingMetric || !user) return;
+    const metric = progressMetrics[editingMetric];
+    const prevValue = metric.current;
     setProgressMetrics((prev) => ({
       ...prev,
       [editingMetric]: { ...prev[editingMetric], previous: prevValue, current: val },
     }));
+    await supabase.from('progress_metrics').upsert({
+      user_id: user.id,
+      metric_key: editingMetric,
+      label: metric.label,
+      current_value: val,
+      previous_value: prevValue,
+    } as any, { onConflict: 'user_id,metric_key' });
     setEditingMetric(null);
   };
 
@@ -269,7 +302,15 @@ const Index = () => {
     setVolcanoes(updated);
   };
 
-  const fixVolcanoComment = (index: number) => {
+  const fixVolcanoComment = async (index: number) => {
+    if (!user) return;
+    const v = volcanoes[index];
+    await supabase.from('volcanoes').upsert({
+      user_id: user.id,
+      name: v.name,
+      value: v.value,
+      comment: v.comment,
+    } as any, { onConflict: 'user_id,name' });
     setSavedStatus(index);
     setTimeout(() => setSavedStatus(null), 1500);
   };
@@ -288,21 +329,41 @@ const Index = () => {
   };
 
   // Diary handlers
-  const handleSaveDaily = (form: { energy: number; text: string; intent: string }) => {
+  const handleSaveDaily = async (form: { energy: number; text: string; intent: string }) => {
+    if (!user) return;
+    const dateStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
+    const { data } = await supabase.from('diary_entries').insert({
+      user_id: user.id,
+      entry_type: 'daily',
+      entry_date: dateStr,
+      energy: form.energy,
+      text: form.text,
+      intent: form.intent,
+    }).select().single();
     const newEntry: DiaryEntry = {
-      id: Date.now(),
+      id: data?.id || Date.now(),
       type: 'daily',
-      date: new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' }),
+      date: dateStr,
       ...form,
     };
     setDiaryEntries([newEntry, ...diaryEntries]);
   };
 
-  const handleSaveWeekly = (form: { achievements: string; lessons: string; nextStep: string }) => {
+  const handleSaveWeekly = async (form: { achievements: string; lessons: string; nextStep: string }) => {
+    if (!user) return;
+    const dateStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
+    const { data } = await supabase.from('diary_entries').insert({
+      user_id: user.id,
+      entry_type: 'weekly',
+      entry_date: dateStr,
+      achievements: form.achievements,
+      lessons: form.lessons,
+      next_step: form.nextStep,
+    }).select().single();
     const newEntry: DiaryEntry = {
-      id: Date.now(),
+      id: data?.id || Date.now(),
       type: 'weekly',
-      date: new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' }),
+      date: dateStr,
       ...form,
     };
     setDiaryEntries([newEntry, ...diaryEntries]);
