@@ -1,5 +1,5 @@
 export interface Goal {
-  id: number;
+  id: string | number;
   title: string;
   amount: string;
   hasAmount: boolean;
@@ -26,7 +26,7 @@ export interface Session {
 }
 
 export interface DiaryEntry {
-  id: number;
+  id: string | number;
   type: 'daily' | 'weekly';
   date: string;
   energy?: number;
