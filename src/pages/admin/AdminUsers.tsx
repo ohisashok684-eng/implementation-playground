@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Search, UserPlus, ShieldOff, Shield } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { externalDb } from '@/lib/externalDb';
 import ModalOverlay from '@/components/ModalOverlay';
 
 interface UserProfile {
@@ -30,13 +29,13 @@ const AdminUsers = () => {
 
   const loadUsers = async () => {
     try {
-      const [profilesRes, rolesRes] = await Promise.all([
-        externalDb.admin.select('profiles', { order: { column: 'created_at', ascending: false } }),
-        externalDb.admin.select('user_roles', { filters: { role: 'super_admin' } }),
+      const [{ data: profiles }, { data: roles }] = await Promise.all([
+        supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+        supabase.from('user_roles').select('user_id').eq('role', 'super_admin'),
       ]);
 
-      const adminIds = new Set((rolesRes.data ?? []).map((r: any) => r.user_id));
-      setUsers((profilesRes.data ?? []).filter((p: any) => !adminIds.has(p.user_id)));
+      const adminIds = new Set((roles ?? []).map((r) => r.user_id));
+      setUsers((profiles ?? []).filter((p) => !adminIds.has(p.user_id)));
     } catch (err) {
       console.error('Failed to load users:', err);
     }
@@ -45,7 +44,7 @@ const AdminUsers = () => {
 
   const toggleBlock = async (profile: UserProfile) => {
     try {
-      await externalDb.admin.update('profiles', { is_blocked: !profile.is_blocked }, { id: profile.id });
+      await supabase.from('profiles').update({ is_blocked: !profile.is_blocked }).eq('id', profile.id);
       setUsers(users.map(u => u.id === profile.id ? { ...u, is_blocked: !u.is_blocked } : u));
     } catch (err) {
       console.error('Failed to toggle block:', err);
