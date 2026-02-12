@@ -102,15 +102,14 @@ const AdminClientView = () => {
   const handleSaveSession = async () => {
     if (!userId) return;
 
-    // Upload files first
-    const fileUrls: string[] = [];
+    // Upload files first - store paths, not public URLs
+    const filePaths: string[] = [];
     for (const file of sessionForm.files) {
       const ext = file.name.split('.').pop();
       const path = `${userId}/sessions/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, file);
       if (!upErr) {
-        const { data: urlData } = supabase.storage.from('mentoring-files').getPublicUrl(path);
-        fileUrls.push(urlData.publicUrl);
+        filePaths.push(path);
       }
     }
 
@@ -121,7 +120,7 @@ const AdminClientView = () => {
       session_time: sessionForm.session_time,
       summary: sessionForm.summary,
       steps: sessionForm.steps.filter(s => s.trim()),
-      files: fileUrls,
+      files: filePaths,
     });
     if (error) {
       toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
@@ -146,8 +145,7 @@ const AdminClientView = () => {
         toast({ title: 'Ошибка загрузки файла', description: upErr.message, variant: 'destructive' });
         return;
       }
-      const { data: urlData } = supabase.storage.from('mentoring-files').getPublicUrl(path);
-      fileUrl = urlData.publicUrl;
+      fileUrl = path;
     }
 
     const { error } = await supabase.from('protocols').insert({
@@ -222,8 +220,7 @@ const AdminClientView = () => {
       toast({ title: 'Ошибка загрузки', description: upErr.message, variant: 'destructive' });
       return;
     }
-    const { data: urlData } = supabase.storage.from('mentoring-files').getPublicUrl(path);
-    await supabase.from('roadmaps').update({ file_url: urlData.publicUrl } as any).eq('id', roadmapId);
+    await supabase.from('roadmaps').update({ file_url: path } as any).eq('id', roadmapId);
     toast({ title: 'Файл загружен' });
     loadClientData(userId!);
   };
@@ -375,10 +372,13 @@ const AdminClientView = () => {
               )}
               {s.files?.length > 0 && (
                 <div className="space-y-1 pt-1">
-                  {s.files.map((fileUrl: string, i: number) => (
-                    <a key={i} href={fileUrl} target="_blank" rel="noreferrer" className="text-[10px] text-secondary font-medium underline block">
+                  {s.files.map((filePath: string, i: number) => (
+                    <button key={i} onClick={async () => {
+                      const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(filePath, 3600);
+                      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                    }} className="text-[10px] text-secondary font-medium underline block cursor-pointer bg-transparent border-none p-0">
                       📎 Файл {i + 1}
-                    </a>
+                    </button>
                   ))}
                 </div>
               )}
@@ -395,9 +395,8 @@ const AdminClientView = () => {
                     toast({ title: 'Ошибка загрузки', description: upErr.message, variant: 'destructive' });
                     return;
                   }
-                  const { data: urlData } = supabase.storage.from('mentoring-files').getPublicUrl(path);
                   const currentFiles = s.files || [];
-                  await supabase.from('sessions').update({ files: [...currentFiles, urlData.publicUrl] } as any).eq('id', s.id);
+                  await supabase.from('sessions').update({ files: [...currentFiles, path] } as any).eq('id', s.id);
                   toast({ title: 'Файл загружен' });
                   loadClientData(userId);
                 }} />

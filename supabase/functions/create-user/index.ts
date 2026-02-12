@@ -58,6 +58,23 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Validate inputs
+    if (typeof email !== "string" || email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return new Response(JSON.stringify({ error: "Invalid email format" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (typeof password !== "string" || password.length < 6 || password.length > 128) {
+      return new Response(JSON.stringify({ error: "Password must be 6-128 characters" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const sanitizedName = typeof full_name === "string" ? full_name.trim().slice(0, 200) : "";
+
     // Use service role to create user
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
@@ -65,7 +82,7 @@ Deno.serve(async (req) => {
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: full_name || "" },
+      user_metadata: { full_name: sanitizedName },
     });
 
     if (error) {
@@ -76,10 +93,10 @@ Deno.serve(async (req) => {
     }
 
     // Update profile name
-    if (data.user && full_name) {
+    if (data.user && sanitizedName) {
       await adminClient
         .from("profiles")
-        .update({ full_name })
+        .update({ full_name: sanitizedName })
         .eq("user_id", data.user.id);
     }
 
@@ -88,7 +105,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
