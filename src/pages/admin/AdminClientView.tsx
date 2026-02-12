@@ -33,6 +33,11 @@ const AdminClientView = () => {
   const [showPointBForm, setShowPointBForm] = useState(false);
   const [editingRoadmap, setEditingRoadmap] = useState<string | null>(null);
 
+  // Editing IDs (null = create mode)
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingProtocolId, setEditingProtocolId] = useState<string | null>(null);
+  const [editingRoadmapId, setEditingRoadmapId] = useState<string | null>(null);
+
   // Session form
   const [sessionForm, setSessionForm] = useState({
     session_number: 1, session_date: '', session_time: '', summary: '', steps: [''], files: [] as File[]
@@ -45,7 +50,7 @@ const AdminClientView = () => {
 
   // Roadmap form
   const [roadmapForm, setRoadmapForm] = useState({
-    title: '', description: '', status: 'В работе', steps: [''] as string[]
+    title: '', description: '', status: 'В работе', steps: [''] as string[], file: null as File | null
   });
 
   // Question form
@@ -105,10 +110,30 @@ const AdminClientView = () => {
   };
 
   // === SESSIONS ===
+  const openEditSession = (s: any) => {
+    setEditingSessionId(s.id);
+    setSessionForm({
+      session_number: s.session_number,
+      session_date: s.session_date,
+      session_time: s.session_time,
+      summary: s.summary || '',
+      steps: s.steps?.length > 0 ? [...s.steps] : [''],
+      files: [],
+    });
+    setShowSessionForm(true);
+  };
+
+  const openCreateSession = () => {
+    setEditingSessionId(null);
+    const maxNum = sessions.reduce((max: number, s: any) => Math.max(max, s.session_number), 0);
+    setSessionForm({ session_number: maxNum + 1, session_date: '', session_time: '', summary: '', steps: [''], files: [] });
+    setShowSessionForm(true);
+  };
+
   const handleSaveSession = async () => {
     if (!userId) return;
 
-    // Upload files first - store paths, not public URLs
+    // Upload new files
     const filePaths: string[] = [];
     for (const file of sessionForm.files) {
       const ext = file.name.split('.').pop();
@@ -120,17 +145,34 @@ const AdminClientView = () => {
     }
 
     try {
-      await externalDb.admin.insert('sessions', {
-        user_id: userId,
-        session_number: sessionForm.session_number,
-        session_date: sessionForm.session_date,
-        session_time: sessionForm.session_time,
-        summary: sessionForm.summary,
-        steps: sessionForm.steps.filter(s => s.trim()),
-        files: filePaths,
-      });
-      toast({ title: 'Сессия добавлена' });
+      if (editingSessionId) {
+        // Update existing session
+        const existingSession = sessions.find(s => s.id === editingSessionId);
+        const existingFiles = existingSession?.files || [];
+        await externalDb.admin.update('sessions', {
+          session_number: sessionForm.session_number,
+          session_date: sessionForm.session_date,
+          session_time: sessionForm.session_time,
+          summary: sessionForm.summary,
+          steps: sessionForm.steps.filter(s => s.trim()),
+          files: [...existingFiles, ...filePaths],
+        }, { id: editingSessionId });
+        toast({ title: 'Сессия обновлена' });
+      } else {
+        // Create new session
+        await externalDb.admin.insert('sessions', {
+          user_id: userId,
+          session_number: sessionForm.session_number,
+          session_date: sessionForm.session_date,
+          session_time: sessionForm.session_time,
+          summary: sessionForm.summary,
+          steps: sessionForm.steps.filter(s => s.trim()),
+          files: filePaths,
+        });
+        toast({ title: 'Сессия добавлена' });
+      }
       setShowSessionForm(false);
+      setEditingSessionId(null);
       setSessionForm(prev => ({ ...prev, files: [] }));
       loadClientData(userId);
     } catch (error: any) {
@@ -139,9 +181,27 @@ const AdminClientView = () => {
   };
 
   // === PROTOCOLS ===
+  const openEditProtocol = (p: any) => {
+    setEditingProtocolId(p.id);
+    setProtocolForm({
+      title: p.title,
+      description: p.description || '',
+      color: p.color || 'amber',
+      file: null,
+    });
+    setShowProtocolForm(true);
+  };
+
+  const openCreateProtocol = () => {
+    setEditingProtocolId(null);
+    setProtocolForm({ title: '', description: '', color: 'amber', file: null });
+    setShowProtocolForm(true);
+  };
+
   const handleSaveProtocol = async () => {
     if (!userId) return;
     let fileUrl: string | null = null;
+    let fileName = '';
 
     if (protocolForm.file) {
       const ext = protocolForm.file.name.split('.').pop();
@@ -152,19 +212,35 @@ const AdminClientView = () => {
         return;
       }
       fileUrl = path;
+      fileName = protocolForm.file.name;
     }
 
     try {
-      await externalDb.admin.insert('protocols', {
-        user_id: userId,
-        title: protocolForm.title,
-        description: protocolForm.description,
-        color: protocolForm.color,
-        file_name: protocolForm.file?.name || '',
-        file_url: fileUrl,
-      });
-      toast({ title: 'Протокол добавлен' });
+      if (editingProtocolId) {
+        const updates: any = {
+          title: protocolForm.title,
+          description: protocolForm.description,
+          color: protocolForm.color,
+        };
+        if (fileUrl) {
+          updates.file_url = fileUrl;
+          updates.file_name = fileName;
+        }
+        await externalDb.admin.update('protocols', updates, { id: editingProtocolId });
+        toast({ title: 'Протокол обновлён' });
+      } else {
+        await externalDb.admin.insert('protocols', {
+          user_id: userId,
+          title: protocolForm.title,
+          description: protocolForm.description,
+          color: protocolForm.color,
+          file_name: fileName,
+          file_url: fileUrl,
+        });
+        toast({ title: 'Протокол добавлен' });
+      }
       setShowProtocolForm(false);
+      setEditingProtocolId(null);
       setProtocolForm({ title: '', description: '', color: 'amber', file: null });
       loadClientData(userId);
     } catch (error: any) {
@@ -173,30 +249,75 @@ const AdminClientView = () => {
   };
 
   // === ROADMAPS ===
+  const openEditRoadmapMeta = (r: any) => {
+    setEditingRoadmapId(r.id);
+    setRoadmapForm({
+      title: r.title,
+      description: r.description || '',
+      status: r.status || 'В работе',
+      steps: [''],
+      file: null,
+    });
+    setShowRoadmapForm(true);
+  };
+
+  const openCreateRoadmap = () => {
+    setEditingRoadmapId(null);
+    setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''], file: null });
+    setShowRoadmapForm(true);
+  };
+
   const handleSaveRoadmap = async () => {
     if (!userId) return;
-    try {
-      const res = await externalDb.admin.insert('roadmaps', {
-        user_id: userId,
-        title: roadmapForm.title,
-        description: roadmapForm.description,
-        status: roadmapForm.status,
-      });
 
-      // Insert steps
-      const steps = roadmapForm.steps.filter(s => s.trim());
-      if (steps.length > 0 && res.data) {
-        for (let i = 0; i < steps.length; i++) {
-          await externalDb.admin.insert('roadmap_steps', {
-            roadmap_id: res.data.id,
-            text: steps[i],
-            sort_order: i,
-          });
-        }
+    // Upload file if provided
+    let fileUrl: string | null = null;
+    if (roadmapForm.file) {
+      const ext = roadmapForm.file.name.split('.').pop();
+      const path = `${userId}/roadmaps/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, roadmapForm.file);
+      if (upErr) {
+        toast({ title: 'Ошибка загрузки файла', description: upErr.message, variant: 'destructive' });
+        return;
       }
-      toast({ title: 'Дорожная карта создана' });
+      fileUrl = path;
+    }
+
+    try {
+      if (editingRoadmapId) {
+        const updates: any = {
+          title: roadmapForm.title,
+          description: roadmapForm.description,
+          status: roadmapForm.status,
+        };
+        if (fileUrl) updates.file_url = fileUrl;
+        await externalDb.admin.update('roadmaps', updates, { id: editingRoadmapId });
+        toast({ title: 'Дорожная карта обновлена' });
+      } else {
+        const res = await externalDb.admin.insert('roadmaps', {
+          user_id: userId,
+          title: roadmapForm.title,
+          description: roadmapForm.description,
+          status: roadmapForm.status,
+          file_url: fileUrl,
+        });
+
+        // Insert steps
+        const steps = roadmapForm.steps.filter(s => s.trim());
+        if (steps.length > 0 && res.data) {
+          for (let i = 0; i < steps.length; i++) {
+            await externalDb.admin.insert('roadmap_steps', {
+              roadmap_id: res.data.id,
+              text: steps[i],
+              sort_order: i,
+            });
+          }
+        }
+        toast({ title: 'Дорожная карта создана' });
+      }
       setShowRoadmapForm(false);
-      setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''] });
+      setEditingRoadmapId(null);
+      setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''], file: null });
       loadClientData(userId!);
     } catch (error: any) {
       toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
@@ -395,7 +516,8 @@ const AdminClientView = () => {
         )}
       </Section>
 
-      <Section title="Сессии" icon={FileText} action={<AddButton onClick={() => setShowSessionForm(true)} label="Добавить" />}>
+      {/* ========== SESSIONS ========== */}
+      <Section title="Сессии" icon={FileText} action={<AddButton onClick={openCreateSession} label="Добавить" />}>
         {sessions.length === 0 ? (
           <p className="text-xs text-muted-foreground">Сессий нет</p>
         ) : (
@@ -403,7 +525,10 @@ const AdminClientView = () => {
             <div key={s.id} className="glass card-round p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-bold text-foreground">Сессия {s.session_number}</p>
-                <span className="text-[10px] text-muted-foreground">{s.session_date} · {s.session_time}</span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] text-muted-foreground">{s.session_date} · {s.session_time}</span>
+                  <button onClick={() => openEditSession(s)} className="text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={14} /></button>
+                </div>
               </div>
               <p className="text-xs text-foreground">{s.summary}</p>
               {s.steps?.length > 0 && (
@@ -453,13 +578,13 @@ const AdminClientView = () => {
         )}
       </Section>
 
-      {/* Session Form Modal */}
+      {/* Session Form Modal (create + edit) */}
       {showSessionForm && (
         <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
           <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-foreground">Новая сессия</h3>
-              <button onClick={() => setShowSessionForm(false)} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
+              <h3 className="text-lg font-black text-foreground">{editingSessionId ? 'Редактировать сессию' : 'Новая сессия'}</h3>
+              <button onClick={() => { setShowSessionForm(false); setEditingSessionId(null); }} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
@@ -493,6 +618,20 @@ const AdminClientView = () => {
             </div>
             <div className="space-y-2">
               <p className="label-tiny">Файлы</p>
+              {editingSessionId && (() => {
+                const existingSession = sessions.find(s => s.id === editingSessionId);
+                const existingFiles = existingSession?.files || [];
+                if (existingFiles.length === 0) return null;
+                return (
+                  <div className="space-y-1">
+                    {existingFiles.map((filePath: string, i: number) => (
+                      <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-xl">
+                        <span className="text-[10px] text-foreground font-medium truncate">📎 Файл {i + 1} (загружен)</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
               {sessionForm.files.map((f, i) => (
                 <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-xl">
                   <span className="text-[10px] text-foreground font-medium truncate">📎 {f.name}</span>
@@ -505,19 +644,22 @@ const AdminClientView = () => {
                 <input type="file" className="hidden" onChange={e => { if (e.target.files?.[0]) setSessionForm({...sessionForm, files: [...sessionForm.files, e.target.files[0]]}); e.target.value = ''; }} />
               </label>
             </div>
-            <button onClick={handleSaveSession} className="w-full py-4 btn-dark">Сохранить сессию</button>
+            <button onClick={handleSaveSession} className="w-full py-4 btn-dark">{editingSessionId ? 'Сохранить изменения' : 'Сохранить сессию'}</button>
           </div>
         </div>
       )}
 
       {/* ========== PROTOCOLS ========== */}
-      <Section title="Протоколы" icon={Zap} action={<AddButton onClick={() => setShowProtocolForm(true)} label="Добавить" />}>
+      <Section title="Протоколы" icon={Zap} action={<AddButton onClick={openCreateProtocol} label="Добавить" />}>
         {protocols.length === 0 ? (
           <p className="text-xs text-muted-foreground">Протоколов нет</p>
         ) : (
           protocols.map((p) => (
             <div key={p.id} className="glass card-round p-4 space-y-1">
-              <p className="text-sm font-bold text-foreground">{p.title}</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-foreground">{p.title}</p>
+                <button onClick={() => openEditProtocol(p)} className="text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={14} /></button>
+              </div>
               <p className="text-xs text-muted-foreground">{p.description}</p>
               {p.file_name && (
                 <p className="text-[10px] text-secondary font-medium">📎 {p.file_name}</p>
@@ -527,13 +669,13 @@ const AdminClientView = () => {
         )}
       </Section>
 
-      {/* Protocol Form Modal */}
+      {/* Protocol Form Modal (create + edit) */}
       {showProtocolForm && (
         <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
           <div className="glass-strong card-round-lg w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-foreground">Новый протокол</h3>
-              <button onClick={() => setShowProtocolForm(false)} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
+              <h3 className="text-lg font-black text-foreground">{editingProtocolId ? 'Редактировать протокол' : 'Новый протокол'}</h3>
+              <button onClick={() => { setShowProtocolForm(false); setEditingProtocolId(null); }} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
             </div>
             <div className="space-y-1">
               <p className="label-tiny">Название</p>
@@ -558,14 +700,19 @@ const AdminClientView = () => {
               <p className="label-tiny">Файл</p>
               <input type="file" ref={fileInputRef} onChange={e => setProtocolForm({...protocolForm, file: e.target.files?.[0] || null})} className="text-xs" />
               {protocolForm.file && <p className="text-[10px] text-secondary font-medium">📎 {protocolForm.file.name}</p>}
+              {editingProtocolId && !protocolForm.file && (() => {
+                const existing = protocols.find(p => p.id === editingProtocolId);
+                if (existing?.file_name) return <p className="text-[10px] text-muted-foreground">Текущий файл: 📎 {existing.file_name}</p>;
+                return null;
+              })()}
             </div>
-            <button onClick={handleSaveProtocol} className="w-full py-4 btn-dark">Сохранить протокол</button>
+            <button onClick={handleSaveProtocol} className="w-full py-4 btn-dark">{editingProtocolId ? 'Сохранить изменения' : 'Сохранить протокол'}</button>
           </div>
         </div>
       )}
 
       {/* ========== ROADMAPS ========== */}
-      <Section title="Дорожные карты" icon={Map} action={<AddButton onClick={() => setShowRoadmapForm(true)} label="Добавить" />}>
+      <Section title="Дорожные карты" icon={Map} action={<AddButton onClick={openCreateRoadmap} label="Добавить" />}>
         {roadmaps.length === 0 ? (
           <p className="text-xs text-muted-foreground">Карт нет</p>
         ) : (
@@ -573,7 +720,10 @@ const AdminClientView = () => {
             <div key={r.id} className="glass card-round p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-bold text-foreground">{r.title}</p>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">{r.status}</span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase">{r.status}</span>
+                  <button onClick={() => openEditRoadmapMeta(r)} className="text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={14} /></button>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">{r.description}</p>
 
@@ -622,13 +772,13 @@ const AdminClientView = () => {
         )}
       </Section>
 
-      {/* Roadmap Form Modal */}
+      {/* Roadmap Form Modal (create + edit) */}
       {showRoadmapForm && (
         <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md p-6 space-y-4">
+          <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-foreground">Новая дорожная карта</h3>
-              <button onClick={() => setShowRoadmapForm(false)} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
+              <h3 className="text-lg font-black text-foreground">{editingRoadmapId ? 'Редактировать карту' : 'Новая дорожная карта'}</h3>
+              <button onClick={() => { setShowRoadmapForm(false); setEditingRoadmapId(null); }} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
             </div>
             <div className="space-y-1">
               <p className="label-tiny">Название</p>
@@ -646,19 +796,32 @@ const AdminClientView = () => {
                 <option>Завершена</option>
               </select>
             </div>
-            <div className="space-y-2">
-              <p className="label-tiny">Шаги</p>
-              {roadmapForm.steps.map((step, i) => (
-                <div key={i} className="flex space-x-2">
-                  <input value={step} onChange={e => { const s = [...roadmapForm.steps]; s[i] = e.target.value; setRoadmapForm({...roadmapForm, steps: s}); }} className="input-glass flex-1" placeholder={`Шаг ${i+1}`} />
-                  {roadmapForm.steps.length > 1 && (
-                    <button onClick={() => setRoadmapForm({...roadmapForm, steps: roadmapForm.steps.filter((_, j) => j !== i)})} className="text-destructive p-2"><Trash2 size={14} /></button>
-                  )}
-                </div>
-              ))}
-              <button onClick={() => setRoadmapForm({...roadmapForm, steps: [...roadmapForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
+            {/* File upload in creation form */}
+            <div className="space-y-1">
+              <p className="label-tiny">Файл дорожной карты</p>
+              <input type="file" onChange={e => setRoadmapForm({...roadmapForm, file: e.target.files?.[0] || null})} className="text-xs" />
+              {roadmapForm.file && <p className="text-[10px] text-secondary font-medium">📎 {roadmapForm.file.name}</p>}
+              {editingRoadmapId && !roadmapForm.file && (() => {
+                const existing = roadmaps.find(r => r.id === editingRoadmapId);
+                if (existing?.file_url) return <p className="text-[10px] text-muted-foreground">Текущий файл загружен ✓</p>;
+                return null;
+              })()}
             </div>
-            <button onClick={handleSaveRoadmap} className="w-full py-4 btn-dark">Создать карту</button>
+            {!editingRoadmapId && (
+              <div className="space-y-2">
+                <p className="label-tiny">Шаги</p>
+                {roadmapForm.steps.map((step, i) => (
+                  <div key={i} className="flex space-x-2">
+                    <input value={step} onChange={e => { const s = [...roadmapForm.steps]; s[i] = e.target.value; setRoadmapForm({...roadmapForm, steps: s}); }} className="input-glass flex-1" placeholder={`Шаг ${i+1}`} />
+                    {roadmapForm.steps.length > 1 && (
+                      <button onClick={() => setRoadmapForm({...roadmapForm, steps: roadmapForm.steps.filter((_, j) => j !== i)})} className="text-destructive p-2"><Trash2 size={14} /></button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={() => setRoadmapForm({...roadmapForm, steps: [...roadmapForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
+              </div>
+            )}
+            <button onClick={handleSaveRoadmap} className="w-full py-4 btn-dark">{editingRoadmapId ? 'Сохранить изменения' : 'Создать карту'}</button>
           </div>
         </div>
       )}
