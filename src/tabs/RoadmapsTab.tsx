@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { CheckCircle2, Circle, Trash2, Plus, Pencil, X } from 'lucide-react';
+import { CheckCircle2, Circle, Trash2, Plus, Pencil, X, FileDown } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import type { Roadmap } from '@/types/mentoring';
 
 interface RoadmapsTabProps {
@@ -79,6 +80,18 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
               {rm.steps.filter((s) => s.done).length}/{rm.steps.length}
             </span>
           </div>
+          {rm.fileUrl && (
+            <button
+              onClick={async () => {
+                const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(rm.fileUrl!, 3600);
+                if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+              }}
+              className="flex items-center space-x-1 text-secondary text-xs font-bold hover:text-secondary/80 transition-colors"
+            >
+              <FileDown size={12} />
+              <span>Открыть файл</span>
+            </button>
+          )}
           <button
             onClick={() => setSelectedRoadmapId(rm.id)}
             className="flex items-center space-x-1 text-secondary text-xs font-bold hover:text-secondary/80 transition-colors"

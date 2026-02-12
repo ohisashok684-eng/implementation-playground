@@ -120,6 +120,7 @@ const Index = () => {
           title: r.title,
           status: r.status,
           description: r.description,
+          fileUrl: r.file_url || undefined,
           steps: (r.roadmap_steps || [])
             .sort((a: any, b: any) => a.sort_order - b.sort_order)
             .map((st: any) => ({

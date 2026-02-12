@@ -61,6 +61,7 @@ export interface Roadmap {
   status: string;
   description: string;
   steps: RoadmapStep[];
+  fileUrl?: string;
 }
 
 export interface RouteInfo {
