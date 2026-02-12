@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, Circle, Trash2, Plus, Pencil, X, FileDown } from 'lucide-react';
+import { CheckCircle2, Circle, Trash2, Plus, Pencil, X, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Roadmap } from '@/types/mentoring';
 
@@ -86,9 +86,9 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
                 const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(rm.fileUrl!, 3600);
                 if (data?.signedUrl) window.open(data.signedUrl, '_blank');
               }}
-              className="flex items-center space-x-1 text-secondary text-xs font-bold hover:text-secondary/80 transition-colors"
+              className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
             >
-              <FileDown size={12} />
+              <ExternalLink size={14} />
               <span>Открыть файл</span>
             </button>
           )}

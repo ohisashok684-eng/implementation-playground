@@ -1,4 +1,4 @@
-import { Navigation, ChevronRight, Flag, Rocket, ArrowRight, Pencil, Plus, MessageSquare, FileText } from 'lucide-react';
+import { Navigation, ChevronRight, Flag, Rocket, ArrowRight, Pencil, Plus, MessageSquare, FileText, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import MetricRing from '@/components/MetricRing';
 import type { Goal, Session, ProgressMetric, RouteInfo } from '@/types/mentoring';
@@ -133,7 +133,7 @@ const DashboardTab = ({
             </div>
             <p className="text-sm font-semibold text-foreground leading-relaxed">«{s.summary}»</p>
             {s.files.length > 0 && (
-              <div className="flex items-center space-x-2 flex-wrap">
+              <div className="space-y-2">
                 {s.files.map((f, i) => (
                   <button
                     key={i}
@@ -141,10 +141,10 @@ const DashboardTab = ({
                       const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(f, 3600);
                       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
                     }}
-                    className="flex items-center space-x-1 text-secondary text-xs font-medium hover:text-secondary/80 transition-colors bg-transparent border-none p-0 cursor-pointer"
+                    className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
                   >
-                    <FileText size={14} />
-                    <span>📎 Файл {i + 1}</span>
+                    <ExternalLink size={14} />
+                    <span>Открыть файл {s.files.length > 1 ? i + 1 : ''}</span>
                   </button>
                 ))}
               </div>
