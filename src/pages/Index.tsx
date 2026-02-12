@@ -294,10 +294,19 @@ const Index = () => {
   };
 
   // Volcano handlers
-  const updateVolcanoValue = (index: number, newValue: number) => {
+  const updateVolcanoValue = async (index: number, newValue: number) => {
     const updated = [...volcanoes];
     updated[index].value = newValue;
     setVolcanoes(updated);
+    // Auto-save value to DB
+    if (user) {
+      const v = updated[index];
+      await externalDb.upsert('volcanoes', {
+        name: v.name,
+        value: v.value,
+        comment: v.comment,
+      }, 'user_id,name');
+    }
   };
 
   const updateVolcanoComment = (index: number, comment: string) => {

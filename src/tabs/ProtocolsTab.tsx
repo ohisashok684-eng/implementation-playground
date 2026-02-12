@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Zap, Pencil, ExternalLink, FileText, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { externalDb } from '@/lib/externalDb';
 import ModalOverlay from '@/components/ModalOverlay';
 import type { Protocol } from '@/types/mentoring';
 
@@ -21,25 +22,67 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempProtocol, setTempProtocol] = useState({ title: '', desc: '', fileName: '' });
+  const [newFile, setNewFile] = useState<File | null>(null);
 
   const openEdit = (p: Protocol) => {
     setEditingId(p.id);
     setTempProtocol({ title: p.title, desc: p.desc, fileName: p.fileName || '' });
+    setNewFile(null);
     setIsModalOpen(true);
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setNewFile(file);
       setTempProtocol((prev) => ({ ...prev, fileName: file.name }));
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!editingId) return;
+
+    const updateData: Record<string, any> = {
+      title: tempProtocol.title,
+      description: tempProtocol.desc,
+      file_name: tempProtocol.fileName,
+    };
+
+    // Upload new file if selected
+    if (newFile) {
+      const protocol = protocols.find(p => p.id === editingId);
+      const ext = newFile.name.split('.').pop();
+      const path = `protocols/${editingId}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, newFile);
+      if (upErr) {
+        onNotify({ type: 'error', message: 'Ошибка загрузки файла' });
+        return;
+      }
+      updateData.file_url = path;
+    }
+
+    // Persist to DB
+    try {
+      await externalDb.update('protocols', updateData, { id: editingId });
+    } catch (err) {
+      console.error('Failed to persist protocol update:', err);
+      onNotify({ type: 'error', message: 'Ошибка сохранения' });
+      return;
+    }
+
+    // Update local state
     onUpdateProtocols(
-      protocols.map((p) => (p.id === editingId ? { ...p, ...tempProtocol } : p))
+      protocols.map((p) => (p.id === editingId ? {
+        ...p,
+        title: tempProtocol.title,
+        desc: tempProtocol.desc,
+        fileName: tempProtocol.fileName,
+        fileUrl: updateData.file_url || p.fileUrl,
+      } : p))
     );
+    setNewFile(null);
     setIsModalOpen(false);
+    onNotify({ type: 'success', message: 'Протокол сохранён' });
   };
 
   const handleOpenFile = async (protocol: Protocol) => {
