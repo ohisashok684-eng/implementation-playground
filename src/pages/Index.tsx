@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User, Plus, Trash2, X, Flag, Rocket, Check, LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { externalDb } from '@/lib/externalDb';
 import BottomNav from '@/components/BottomNav';
 import NotificationToast from '@/components/NotificationToast';
 import ModalOverlay from '@/components/ModalOverlay';
@@ -19,7 +20,7 @@ import {
   initialRoadmaps,
   initialRouteInfo,
 } from '@/data/initialData';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // keep for storage only
 import type { TabId, Goal, DiaryEntry } from '@/types/mentoring';
 
 const Index = () => {
@@ -64,127 +65,130 @@ const Index = () => {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes] = await Promise.all([
-        supabase.from('goals').select('*').eq('user_id', user.id),
-        supabase.from('sessions').select('*').eq('user_id', user.id).order('session_number'),
-        supabase.from('protocols').select('*').eq('user_id', user.id),
-        supabase.from('roadmaps').select('*, roadmap_steps(*)').eq('user_id', user.id),
-        supabase.from('volcanoes').select('*').eq('user_id', user.id),
-        supabase.from('progress_metrics').select('*').eq('user_id', user.id),
-        supabase.from('route_info').select('*').eq('user_id', user.id).maybeSingle(),
-        supabase.from('diary_entries').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('point_b_questions').select('*').eq('user_id', user.id).order('sort_order'),
-        supabase.from('point_b_answers').select('*').eq('user_id', user.id),
-      ]);
+      try {
+        const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes] = await Promise.all([
+          externalDb.select('goals', { filters: { user_id: user.id } }),
+          externalDb.select('sessions', { filters: { user_id: user.id }, order: { column: 'session_number', ascending: true } }),
+          externalDb.select('protocols', { filters: { user_id: user.id } }),
+          externalDb.select('roadmaps', { filters: { user_id: user.id }, withSteps: true }),
+          externalDb.select('volcanoes', { filters: { user_id: user.id } }),
+          externalDb.select('progress_metrics', { filters: { user_id: user.id } }),
+          externalDb.select('route_info', { filters: { user_id: user.id }, single: true }),
+          externalDb.select('diary_entries', { filters: { user_id: user.id }, order: { column: 'created_at', ascending: false } }),
+          externalDb.select('point_b_questions', { filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } }),
+          externalDb.select('point_b_answers', { filters: { user_id: user.id } }),
+        ]);
 
-      // Goals
-      if (goalsRes.data && goalsRes.data.length > 0) {
-        setGoals(goalsRes.data.map((g: any) => ({
-          id: g.id,
-          title: g.title,
-          amount: g.amount || '',
-          hasAmount: g.has_amount,
-          progress: g.progress,
-        })));
+        // Goals
+        if (goalsRes.data && goalsRes.data.length > 0) {
+          setGoals(goalsRes.data.map((g: any) => ({
+            id: g.id,
+            title: g.title,
+            amount: g.amount || '',
+            hasAmount: g.has_amount,
+            progress: g.progress,
+          })));
+        }
+
+        // Sessions
+        if (sessionsRes.data && sessionsRes.data.length > 0) {
+          setSessions(sessionsRes.data.map((s: any) => ({
+            number: s.session_number,
+            date: s.session_date,
+            time: s.session_time,
+            summary: s.summary,
+            steps: s.steps || [],
+            gradient: s.gradient,
+            files: s.files || [],
+          })));
+        }
+
+        // Protocols
+        if (protocolsRes.data && protocolsRes.data.length > 0) {
+          setProtocols(protocolsRes.data.map((p: any) => ({
+            id: p.id,
+            title: p.title,
+            desc: p.description,
+            icon: p.icon,
+            color: p.color,
+            fileName: p.file_name,
+            fileUrl: p.file_url || undefined,
+          })));
+        }
+
+        // Roadmaps
+        if (roadmapsRes.data && roadmapsRes.data.length > 0) {
+          setRoadmaps(roadmapsRes.data.map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            status: r.status,
+            description: r.description,
+            fileUrl: r.file_url || undefined,
+            steps: (r.roadmap_steps || [])
+              .sort((a: any, b: any) => a.sort_order - b.sort_order)
+              .map((st: any) => ({
+                text: st.text,
+                done: st.done,
+                deadline: st.deadline || '',
+              })),
+          })));
+        }
+
+        // Volcanoes
+        if (volcanoesRes.data && volcanoesRes.data.length > 0) {
+          setVolcanoes(volcanoesRes.data.map((v: any) => ({
+            name: v.name,
+            value: v.value,
+            comment: v.comment,
+          })));
+        }
+
+        // Metrics
+        if (metricsRes.data && metricsRes.data.length > 0) {
+          const mapped: Record<string, any> = {};
+          metricsRes.data.forEach((m: any) => {
+            mapped[m.metric_key] = {
+              label: m.label,
+              current: m.current_value,
+              previous: m.previous_value,
+            };
+          });
+          setProgressMetrics(prev => ({ ...prev, ...mapped }));
+        }
+
+        // Route info
+        if (routeRes.data) {
+          setRouteInfo({
+            sessionsTotal: routeRes.data.sessions_total,
+            sessionsDone: routeRes.data.sessions_done,
+            timeWeeks: routeRes.data.time_weeks,
+            resources: routeRes.data.resources || [],
+          });
+        }
+
+        // Diary
+        if (diaryRes.data && diaryRes.data.length > 0) {
+          setDiaryEntries(diaryRes.data.map((d: any) => ({
+            id: d.id,
+            type: d.entry_type as 'daily' | 'weekly',
+            date: d.entry_date,
+            energy: d.energy ?? undefined,
+            text: d.text ?? undefined,
+            intent: d.intent ?? undefined,
+            achievements: d.achievements ?? undefined,
+            lessons: d.lessons ?? undefined,
+            nextStep: d.next_step ?? undefined,
+          })));
+        }
+
+        // Point B
+        setPointBQuestions(questionsRes.data ?? []);
+        const answerMap: Record<string, string> = {};
+        (answersRes.data ?? []).forEach((a: any) => { answerMap[a.question_id] = a.answer_text; });
+        setPointBAnswers(answerMap);
+      } catch (err) {
+        console.error('Error loading data from external DB:', err);
       }
-
-      // Sessions
-      if (sessionsRes.data && sessionsRes.data.length > 0) {
-        setSessions(sessionsRes.data.map((s: any) => ({
-          number: s.session_number,
-          date: s.session_date,
-          time: s.session_time,
-          summary: s.summary,
-          steps: s.steps || [],
-          gradient: s.gradient,
-          files: s.files || [],
-        })));
-      }
-
-      // Protocols
-      if (protocolsRes.data && protocolsRes.data.length > 0) {
-        setProtocols(protocolsRes.data.map((p: any) => ({
-          id: p.id,
-          title: p.title,
-          desc: p.description,
-          icon: p.icon,
-          color: p.color,
-          fileName: p.file_name,
-          fileUrl: p.file_url || undefined,
-        })));
-      }
-
-      // Roadmaps
-      if (roadmapsRes.data && roadmapsRes.data.length > 0) {
-        setRoadmaps(roadmapsRes.data.map((r: any) => ({
-          id: r.id,
-          title: r.title,
-          status: r.status,
-          description: r.description,
-          fileUrl: r.file_url || undefined,
-          steps: (r.roadmap_steps || [])
-            .sort((a: any, b: any) => a.sort_order - b.sort_order)
-            .map((st: any) => ({
-              text: st.text,
-              done: st.done,
-              deadline: st.deadline || '',
-            })),
-        })));
-      }
-
-      // Volcanoes
-      if (volcanoesRes.data && volcanoesRes.data.length > 0) {
-        setVolcanoes(volcanoesRes.data.map((v: any) => ({
-          name: v.name,
-          value: v.value,
-          comment: v.comment,
-        })));
-      }
-
-      // Metrics
-      if (metricsRes.data && metricsRes.data.length > 0) {
-        const mapped: Record<string, any> = {};
-        metricsRes.data.forEach((m: any) => {
-          mapped[m.metric_key] = {
-            label: m.label,
-            current: m.current_value,
-            previous: m.previous_value,
-          };
-        });
-        setProgressMetrics(prev => ({ ...prev, ...mapped }));
-      }
-
-      // Route info
-      if (routeRes.data) {
-        setRouteInfo({
-          sessionsTotal: routeRes.data.sessions_total,
-          sessionsDone: routeRes.data.sessions_done,
-          timeWeeks: routeRes.data.time_weeks,
-          resources: routeRes.data.resources || [],
-        });
-      }
-
-      // Diary
-      if (diaryRes.data && diaryRes.data.length > 0) {
-        setDiaryEntries(diaryRes.data.map((d: any) => ({
-          id: d.id,
-          type: d.entry_type as 'daily' | 'weekly',
-          date: d.entry_date,
-          energy: d.energy ?? undefined,
-          text: d.text ?? undefined,
-          intent: d.intent ?? undefined,
-          achievements: d.achievements ?? undefined,
-          lessons: d.lessons ?? undefined,
-          nextStep: d.next_step ?? undefined,
-        })));
-      }
-
-      // Point B
-      setPointBQuestions(questionsRes.data ?? []);
-      const answerMap: Record<string, string> = {};
-      (answersRes.data ?? []).forEach((a: any) => { answerMap[a.question_id] = a.answer_text; });
-      setPointBAnswers(answerMap);
-
       setDataLoaded(true);
     };
     load();
@@ -215,22 +219,21 @@ const Index = () => {
     if (!user) return;
     if (editingGoalId) {
       setGoals(goals.map((g) => (g.id === editingGoalId ? { ...tempGoal } : g)));
-      await supabase.from('goals').update({
+      await externalDb.update('goals', {
         title: tempGoal.title,
         amount: tempGoal.amount,
         has_amount: tempGoal.hasAmount,
         progress: tempGoal.progress,
-      }).eq('id', String(editingGoalId));
+      }, { id: String(editingGoalId) });
     } else {
-      const { data } = await supabase.from('goals').insert({
-        user_id: user.id,
+      const res = await externalDb.insert('goals', {
         title: tempGoal.title,
         amount: tempGoal.amount,
         has_amount: tempGoal.hasAmount,
         progress: tempGoal.progress,
-      }).select().single();
-      if (data) {
-        setGoals([...goals, { ...tempGoal, id: data.id }]);
+      });
+      if (res.data) {
+        setGoals([...goals, { ...tempGoal, id: res.data.id }]);
       }
     }
     setIsGoalModalOpen(false);
@@ -238,7 +241,7 @@ const Index = () => {
 
   const deleteGoal = async (id: string | number) => {
     setGoals(goals.filter((g) => g.id !== id));
-    await supabase.from('goals').delete().eq('id', String(id));
+    await externalDb.delete('goals', { id: String(id) });
     setIsGoalModalOpen(false);
   };
 
@@ -251,13 +254,12 @@ const Index = () => {
   const saveRoute = async () => {
     if (!user) return;
     setRouteInfo({ ...tempRoute });
-    await supabase.from('route_info').upsert({
-      user_id: user.id,
+    await externalDb.upsert('route_info', {
       sessions_total: tempRoute.sessionsTotal,
       sessions_done: tempRoute.sessionsDone,
       time_weeks: tempRoute.timeWeeks,
       resources: tempRoute.resources,
-    } as any, { onConflict: 'user_id' });
+    }, 'user_id');
     setIsRouteModalOpen(false);
   };
 
@@ -283,13 +285,12 @@ const Index = () => {
       [metricKey]: { ...prev[metricKey], previous: prevValue, current: val },
     }));
     setEditingMetric(null);
-    await supabase.from('progress_metrics').upsert({
-      user_id: user.id,
+    await externalDb.upsert('progress_metrics', {
       metric_key: metricKey,
       label: metric.label,
       current_value: val,
       previous_value: prevValue,
-    } as any, { onConflict: 'user_id,metric_key' });
+    }, 'user_id,metric_key');
   };
 
   // Volcano handlers
@@ -308,12 +309,11 @@ const Index = () => {
   const fixVolcanoComment = async (index: number) => {
     if (!user) return;
     const v = volcanoes[index];
-    await supabase.from('volcanoes').upsert({
-      user_id: user.id,
+    await externalDb.upsert('volcanoes', {
       name: v.name,
       value: v.value,
       comment: v.comment,
-    } as any, { onConflict: 'user_id,name' });
+    }, 'user_id,name');
     setSavedStatus(index);
     setTimeout(() => setSavedStatus(null), 1500);
   };
@@ -322,11 +322,10 @@ const Index = () => {
   const fixResultB = async (questionId: string) => {
     if (!user) return;
     const text = pointBAnswers[questionId] || '';
-    await supabase.from('point_b_answers').upsert({
-      user_id: user.id,
+    await externalDb.upsert('point_b_answers', {
       question_id: questionId,
       answer_text: text,
-    } as any, { onConflict: 'user_id,question_id' });
+    }, 'user_id,question_id');
     setSavedStatusB(questionId);
     setTimeout(() => setSavedStatusB(null), 1500);
   };
@@ -335,16 +334,15 @@ const Index = () => {
   const handleSaveDaily = async (form: { energy: number; text: string; intent: string }) => {
     if (!user) return;
     const dateStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
-    const { data } = await supabase.from('diary_entries').insert({
-      user_id: user.id,
+    const res = await externalDb.insert('diary_entries', {
       entry_type: 'daily',
       entry_date: dateStr,
       energy: form.energy,
       text: form.text,
       intent: form.intent,
-    }).select().single();
+    });
     const newEntry: DiaryEntry = {
-      id: data?.id || Date.now(),
+      id: res.data?.id || Date.now(),
       type: 'daily',
       date: dateStr,
       ...form,
@@ -355,16 +353,15 @@ const Index = () => {
   const handleSaveWeekly = async (form: { achievements: string; lessons: string; nextStep: string }) => {
     if (!user) return;
     const dateStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
-    const { data } = await supabase.from('diary_entries').insert({
-      user_id: user.id,
+    const res = await externalDb.insert('diary_entries', {
       entry_type: 'weekly',
       entry_date: dateStr,
       achievements: form.achievements,
       lessons: form.lessons,
       next_step: form.nextStep,
-    }).select().single();
+    });
     const newEntry: DiaryEntry = {
-      id: data?.id || Date.now(),
+      id: res.data?.id || Date.now(),
       type: 'weekly',
       date: dateStr,
       ...form,
