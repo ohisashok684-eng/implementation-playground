@@ -254,8 +254,8 @@ const AdminClientView = () => {
     </div>
   );
 
-  const AddButton = ({ onClick, label }: { onClick: () => void; label: string }) => (
-    <button onClick={onClick} className="flex items-center space-x-1 text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80 transition-colors">
+   const AddButton = ({ onClick, label }: { onClick: () => void; label: string }) => (
+     <button onClick={onClick} className="flex items-center space-x-1 text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80 transition-colors">
       <Plus size={14} />
       <span>{label}</span>
     </button>
@@ -428,8 +428,8 @@ const AdminClientView = () => {
               <div className="space-y-2">
                 {r.roadmap_steps?.sort((a: any, b: any) => a.sort_order - b.sort_order).map((s: any) => (
                   <div key={s.id} className="flex items-center space-x-2 group">
-                    <button onClick={() => handleUpdateStep(s.id, { done: !s.done })} className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${s.done ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>
-                      {s.done && <Check size={12} className="text-primary-foreground" />}
+                     <button onClick={() => handleUpdateStep(s.id, { done: !s.done })} className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${s.done ? 'bg-secondary border-secondary' : 'border-muted-foreground/30'}`}>
+                       {s.done && <Check size={12} className="text-secondary-foreground" />}
                     </button>
                     {editingRoadmap === s.id ? (
                       <input
@@ -437,7 +437,7 @@ const AdminClientView = () => {
                         defaultValue={s.text}
                         onBlur={e => { handleUpdateStep(s.id, { text: e.target.value }); setEditingRoadmap(null); }}
                         onKeyDown={e => { if (e.key === 'Enter') { handleUpdateStep(s.id, { text: (e.target as HTMLInputElement).value }); setEditingRoadmap(null); } }}
-                        className="flex-1 text-xs bg-transparent border-b border-primary/30 focus:outline-none py-1"
+                        className="flex-1 text-xs bg-transparent border-b border-secondary/30 focus:outline-none py-1"
                       />
                     ) : (
                       <span onClick={() => setEditingRoadmap(s.id)} className={`flex-1 text-xs cursor-pointer hover:text-secondary transition-colors ${s.done ? 'line-through text-muted-foreground' : 'text-foreground'}`}>{s.text}</span>
@@ -502,7 +502,7 @@ const AdminClientView = () => {
                           onChange={e => setEditingQuestionText(e.target.value)}
                           onBlur={() => handleUpdateQuestion(q.id, editingQuestionText)}
                           onKeyDown={e => { if (e.key === 'Enter') handleUpdateQuestion(q.id, editingQuestionText); }}
-                          className="w-full text-xs bg-transparent border-b border-primary/30 focus:outline-none py-1" />
+                          className="w-full text-xs bg-transparent border-b border-secondary/30 focus:outline-none py-1" />
                       ) : (
                         <p className="text-xs text-foreground">{q.question_text}</p>
                       )}
@@ -528,7 +528,7 @@ const AdminClientView = () => {
                           onChange={e => setEditingQuestionText(e.target.value)}
                           onBlur={() => handleUpdateQuestion(q.id, editingQuestionText)}
                           onKeyDown={e => { if (e.key === 'Enter') handleUpdateQuestion(q.id, editingQuestionText); }}
-                          className="w-full text-xs bg-transparent border-b border-primary/30 focus:outline-none py-1" />
+                          className="w-full text-xs bg-transparent border-b border-secondary/30 focus:outline-none py-1" />
                       ) : (
                         <p className="text-xs text-foreground">{q.question_text}</p>
                       )}
