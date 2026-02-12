@@ -44,7 +44,7 @@ const AdminClientView = () => {
 
   // Roadmap form
   const [roadmapForm, setRoadmapForm] = useState({
-    title: '', description: '', status: 'В работе'
+    title: '', description: '', status: 'В работе', steps: [''] as string[]
   });
 
   // Question form
@@ -156,18 +156,25 @@ const AdminClientView = () => {
   // === ROADMAPS ===
   const handleSaveRoadmap = async () => {
     if (!userId) return;
-    const { error } = await supabase.from('roadmaps').insert({
+    const { data, error } = await supabase.from('roadmaps').insert({
       user_id: userId,
       title: roadmapForm.title,
       description: roadmapForm.description,
       status: roadmapForm.status,
-    });
+    }).select().single();
     if (error) {
       toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
     } else {
+      // Insert steps
+      const steps = roadmapForm.steps.filter(s => s.trim());
+      if (steps.length > 0 && data) {
+        await supabase.from('roadmap_steps').insert(
+          steps.map((text, i) => ({ roadmap_id: data.id, text, sort_order: i }))
+        );
+      }
       toast({ title: 'Дорожная карта создана' });
       setShowRoadmapForm(false);
-      setRoadmapForm({ title: '', description: '', status: 'В работе' });
+      setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''] });
       loadClientData(userId!);
     }
   };
@@ -560,6 +567,18 @@ const AdminClientView = () => {
                 <option>Утверждена</option>
                 <option>Завершена</option>
               </select>
+            </div>
+            <div className="space-y-2">
+              <p className="label-tiny">Шаги</p>
+              {roadmapForm.steps.map((step, i) => (
+                <div key={i} className="flex space-x-2">
+                  <input value={step} onChange={e => { const s = [...roadmapForm.steps]; s[i] = e.target.value; setRoadmapForm({...roadmapForm, steps: s}); }} className="input-glass flex-1" placeholder={`Шаг ${i+1}`} />
+                  {roadmapForm.steps.length > 1 && (
+                    <button onClick={() => setRoadmapForm({...roadmapForm, steps: roadmapForm.steps.filter((_, j) => j !== i)})} className="text-destructive p-2"><Trash2 size={14} /></button>
+                  )}
+                </div>
+              ))}
+              <button onClick={() => setRoadmapForm({...roadmapForm, steps: [...roadmapForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
             </div>
             <button onClick={handleSaveRoadmap} className="w-full py-4 btn-dark">Создать карту</button>
           </div>
