@@ -34,7 +34,7 @@ const AdminClientView = () => {
 
   // Session form
   const [sessionForm, setSessionForm] = useState({
-    session_number: 1, session_date: '', session_time: '', summary: '', steps: ['']
+    session_number: 1, session_date: '', session_time: '', summary: '', steps: [''], files: [] as File[]
   });
 
   // Protocol form
@@ -101,6 +101,19 @@ const AdminClientView = () => {
   // === SESSIONS ===
   const handleSaveSession = async () => {
     if (!userId) return;
+
+    // Upload files first
+    const fileUrls: string[] = [];
+    for (const file of sessionForm.files) {
+      const ext = file.name.split('.').pop();
+      const path = `${userId}/sessions/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, file);
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from('mentoring-files').getPublicUrl(path);
+        fileUrls.push(urlData.publicUrl);
+      }
+    }
+
     const { error } = await supabase.from('sessions').insert({
       user_id: userId,
       session_number: sessionForm.session_number,
@@ -108,12 +121,14 @@ const AdminClientView = () => {
       session_time: sessionForm.session_time,
       summary: sessionForm.summary,
       steps: sessionForm.steps.filter(s => s.trim()),
+      files: fileUrls,
     });
     if (error) {
       toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
     } else {
       toast({ title: 'Сессия добавлена' });
       setShowSessionForm(false);
+      setSessionForm(prev => ({ ...prev, files: [] }));
       loadClientData(userId);
     }
   };
@@ -429,6 +444,20 @@ const AdminClientView = () => {
                 </div>
               ))}
               <button onClick={() => setSessionForm({...sessionForm, steps: [...sessionForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
+            </div>
+            <div className="space-y-2">
+              <p className="label-tiny">Файлы</p>
+              {sessionForm.files.map((f, i) => (
+                <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-xl">
+                  <span className="text-[10px] text-foreground font-medium truncate">📎 {f.name}</span>
+                  <button onClick={() => setSessionForm({...sessionForm, files: sessionForm.files.filter((_, j) => j !== i)})} className="text-destructive p-1"><Trash2 size={12} /></button>
+                </div>
+              ))}
+              <label className="cursor-pointer inline-flex items-center space-x-1 text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80 transition-colors">
+                <Upload size={12} />
+                <span>Добавить файл</span>
+                <input type="file" className="hidden" onChange={e => { if (e.target.files?.[0]) setSessionForm({...sessionForm, files: [...sessionForm.files, e.target.files[0]]}); e.target.value = ''; }} />
+              </label>
             </div>
             <button onClick={handleSaveSession} className="w-full py-4 btn-dark">Сохранить сессию</button>
           </div>
