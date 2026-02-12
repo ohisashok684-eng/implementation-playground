@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Upload, Check, Edit2, MessageSquare, Rocket } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { externalDb } from '@/lib/externalDb';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -68,34 +69,39 @@ const AdminClientView = () => {
   }, [userId]);
 
   const loadClientData = async (uid: string) => {
-    const [profileRes, goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes, pbQuestionsRes] = await Promise.all([
-      supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
-      supabase.from('goals').select('*').eq('user_id', uid).order('created_at'),
-      supabase.from('roadmaps').select('*, roadmap_steps(*)').eq('user_id', uid).order('created_at'),
-      supabase.from('sessions').select('*').eq('user_id', uid).order('session_number', { ascending: false }),
-      supabase.from('protocols').select('*').eq('user_id', uid).order('created_at'),
-      supabase.from('diary_entries').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(10),
-      supabase.from('volcanoes').select('*').eq('user_id', uid),
-      supabase.from('progress_metrics').select('*').eq('user_id', uid),
-      supabase.from('tracking_questions').select('*').eq('user_id', uid).order('sort_order'),
-      supabase.from('point_b_questions').select('*').eq('user_id', uid).order('sort_order'),
-    ]);
+    try {
+      const [profileRes, goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes, pbQuestionsRes] = await Promise.all([
+        externalDb.admin.select('profiles', { filters: { user_id: uid } }),
+        externalDb.admin.select('goals', { filters: { user_id: uid }, order: { column: 'created_at' } }),
+        externalDb.admin.select('roadmaps', { filters: { user_id: uid }, order: { column: 'created_at' }, withSteps: true }),
+        externalDb.admin.select('sessions', { filters: { user_id: uid }, order: { column: 'session_number', ascending: false } }),
+        externalDb.admin.select('protocols', { filters: { user_id: uid }, order: { column: 'created_at' } }),
+        externalDb.admin.select('diary_entries', { filters: { user_id: uid }, order: { column: 'created_at', ascending: false } }),
+        externalDb.admin.select('volcanoes', { filters: { user_id: uid } }),
+        externalDb.admin.select('progress_metrics', { filters: { user_id: uid } }),
+        externalDb.admin.select('tracking_questions', { filters: { user_id: uid }, order: { column: 'sort_order' } }),
+        externalDb.admin.select('point_b_questions', { filters: { user_id: uid }, order: { column: 'sort_order' } }),
+      ]);
 
-    setProfile(profileRes.data);
-    setGoals(goalsRes.data ?? []);
-    setRoadmaps(roadmapsRes.data ?? []);
-    setSessions(sessionsRes.data ?? []);
-    setProtocols(protocolsRes.data ?? []);
-    setDiaryEntries(diaryRes.data ?? []);
-    setVolcanoes(volcanoesRes.data ?? []);
-    setMetrics(metricsRes.data ?? []);
-    setTrackingQuestions(questionsRes.data ?? []);
-    setPointBQuestions(pbQuestionsRes.data ?? []);
-    setLoading(false);
+      setProfile((profileRes.data ?? [])[0] || null);
+      setGoals(goalsRes.data ?? []);
+      setRoadmaps(roadmapsRes.data ?? []);
+      setSessions(sessionsRes.data ?? []);
+      setProtocols(protocolsRes.data ?? []);
+      setDiaryEntries(diaryRes.data ?? []);
+      setVolcanoes(volcanoesRes.data ?? []);
+      setMetrics(metricsRes.data ?? []);
+      setTrackingQuestions(questionsRes.data ?? []);
+      setPointBQuestions(pbQuestionsRes.data ?? []);
+      setLoading(false);
 
-    // Pre-fill session number
-    const maxNum = (sessionsRes.data ?? []).reduce((max: number, s: any) => Math.max(max, s.session_number), 0);
-    setSessionForm(prev => ({ ...prev, session_number: maxNum + 1 }));
+      // Pre-fill session number
+      const maxNum = (sessionsRes.data ?? []).reduce((max: number, s: any) => Math.max(max, s.session_number), 0);
+      setSessionForm(prev => ({ ...prev, session_number: maxNum + 1 }));
+    } catch (err) {
+      console.error('Failed to load client data:', err);
+      setLoading(false);
+    }
   };
 
   // === SESSIONS ===
@@ -113,22 +119,22 @@ const AdminClientView = () => {
       }
     }
 
-    const { error } = await supabase.from('sessions').insert({
-      user_id: userId,
-      session_number: sessionForm.session_number,
-      session_date: sessionForm.session_date,
-      session_time: sessionForm.session_time,
-      summary: sessionForm.summary,
-      steps: sessionForm.steps.filter(s => s.trim()),
-      files: filePaths,
-    });
-    if (error) {
-      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      await externalDb.admin.insert('sessions', {
+        user_id: userId,
+        session_number: sessionForm.session_number,
+        session_date: sessionForm.session_date,
+        session_time: sessionForm.session_time,
+        summary: sessionForm.summary,
+        steps: sessionForm.steps.filter(s => s.trim()),
+        files: filePaths,
+      });
       toast({ title: 'Сессия добавлена' });
       setShowSessionForm(false);
       setSessionForm(prev => ({ ...prev, files: [] }));
       loadClientData(userId);
+    } catch (error: any) {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
     }
   };
 
@@ -148,68 +154,85 @@ const AdminClientView = () => {
       fileUrl = path;
     }
 
-    const { error } = await supabase.from('protocols').insert({
-      user_id: userId,
-      title: protocolForm.title,
-      description: protocolForm.description,
-      color: protocolForm.color,
-      file_name: protocolForm.file?.name || '',
-      file_url: fileUrl,
-    });
-    if (error) {
-      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      await externalDb.admin.insert('protocols', {
+        user_id: userId,
+        title: protocolForm.title,
+        description: protocolForm.description,
+        color: protocolForm.color,
+        file_name: protocolForm.file?.name || '',
+        file_url: fileUrl,
+      });
       toast({ title: 'Протокол добавлен' });
       setShowProtocolForm(false);
       setProtocolForm({ title: '', description: '', color: 'amber', file: null });
       loadClientData(userId);
+    } catch (error: any) {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
     }
   };
 
   // === ROADMAPS ===
   const handleSaveRoadmap = async () => {
     if (!userId) return;
-    const { data, error } = await supabase.from('roadmaps').insert({
-      user_id: userId,
-      title: roadmapForm.title,
-      description: roadmapForm.description,
-      status: roadmapForm.status,
-    }).select().single();
-    if (error) {
-      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      const res = await externalDb.admin.insert('roadmaps', {
+        user_id: userId,
+        title: roadmapForm.title,
+        description: roadmapForm.description,
+        status: roadmapForm.status,
+      });
+
       // Insert steps
       const steps = roadmapForm.steps.filter(s => s.trim());
-      if (steps.length > 0 && data) {
-        await supabase.from('roadmap_steps').insert(
-          steps.map((text, i) => ({ roadmap_id: data.id, text, sort_order: i }))
-        );
+      if (steps.length > 0 && res.data) {
+        for (let i = 0; i < steps.length; i++) {
+          await externalDb.admin.insert('roadmap_steps', {
+            roadmap_id: res.data.id,
+            text: steps[i],
+            sort_order: i,
+          });
+        }
       }
       toast({ title: 'Дорожная карта создана' });
       setShowRoadmapForm(false);
       setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''] });
       loadClientData(userId!);
+    } catch (error: any) {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
     }
   };
 
   const handleAddStep = async (roadmapId: string) => {
     const maxOrder = roadmaps.find(r => r.id === roadmapId)?.roadmap_steps?.length || 0;
-    const { error } = await supabase.from('roadmap_steps').insert({
-      roadmap_id: roadmapId,
-      text: 'Новый шаг',
-      sort_order: maxOrder,
-    });
-    if (!error) loadClientData(userId!);
+    try {
+      await externalDb.admin.insert('roadmap_steps', {
+        roadmap_id: roadmapId,
+        text: 'Новый шаг',
+        sort_order: maxOrder,
+      });
+      loadClientData(userId!);
+    } catch (err) {
+      console.error('Failed to add step:', err);
+    }
   };
 
   const handleUpdateStep = async (stepId: string, updates: any) => {
-    await supabase.from('roadmap_steps').update(updates).eq('id', stepId);
-    loadClientData(userId!);
+    try {
+      await externalDb.admin.update('roadmap_steps', updates, { id: stepId });
+      loadClientData(userId!);
+    } catch (err) {
+      console.error('Failed to update step:', err);
+    }
   };
 
   const handleDeleteStep = async (stepId: string) => {
-    await supabase.from('roadmap_steps').delete().eq('id', stepId);
-    loadClientData(userId!);
+    try {
+      await externalDb.admin.delete('roadmap_steps', { id: stepId });
+      loadClientData(userId!);
+    } catch (err) {
+      console.error('Failed to delete step:', err);
+    }
   };
 
   const handleUploadRoadmapFile = async (roadmapId: string, file: File) => {
@@ -220,71 +243,91 @@ const AdminClientView = () => {
       toast({ title: 'Ошибка загрузки', description: upErr.message, variant: 'destructive' });
       return;
     }
-    await supabase.from('roadmaps').update({ file_url: path } as any).eq('id', roadmapId);
-    toast({ title: 'Файл загружен' });
-    loadClientData(userId!);
+    try {
+      await externalDb.admin.update('roadmaps', { file_url: path }, { id: roadmapId });
+      toast({ title: 'Файл загружен' });
+      loadClientData(userId!);
+    } catch (err) {
+      console.error('Failed to update roadmap file:', err);
+    }
   };
 
   // === TRACKING QUESTIONS ===
   const handleSaveQuestion = async () => {
     if (!userId) return;
     const maxOrder = trackingQuestions.filter(q => q.question_type === questionForm.question_type).length;
-    const { error } = await supabase.from('tracking_questions').insert({
-      user_id: userId,
-      question_type: questionForm.question_type,
-      question_text: questionForm.question_text,
-      field_type: questionForm.field_type,
-      sort_order: maxOrder,
-    } as any);
-    if (error) {
-      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      await externalDb.admin.insert('tracking_questions', {
+        user_id: userId,
+        question_type: questionForm.question_type,
+        question_text: questionForm.question_text,
+        field_type: questionForm.field_type,
+        sort_order: maxOrder,
+      });
       toast({ title: 'Вопрос добавлен' });
       setShowQuestionForm(false);
       setQuestionForm({ question_type: 'daily', question_text: '', field_type: 'text' });
       loadClientData(userId);
+    } catch (error: any) {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
     }
   };
 
   const handleUpdateQuestion = async (id: string, text: string) => {
-    await supabase.from('tracking_questions').update({ question_text: text } as any).eq('id', id);
-    setEditingQuestionId(null);
-    loadClientData(userId!);
+    try {
+      await externalDb.admin.update('tracking_questions', { question_text: text }, { id });
+      setEditingQuestionId(null);
+      loadClientData(userId!);
+    } catch (err) {
+      console.error('Failed to update question:', err);
+    }
   };
 
   const handleDeleteQuestion = async (id: string) => {
-    await supabase.from('tracking_questions').delete().eq('id', id);
-    loadClientData(userId!);
+    try {
+      await externalDb.admin.delete('tracking_questions', { id });
+      loadClientData(userId!);
+    } catch (err) {
+      console.error('Failed to delete question:', err);
+    }
   };
 
   // === POINT B QUESTIONS ===
   const handleSavePointBQuestion = async () => {
     if (!userId || !pointBFormText.trim()) return;
     const maxOrder = pointBQuestions.length;
-    const { error } = await supabase.from('point_b_questions').insert({
-      user_id: userId,
-      question_text: pointBFormText.trim(),
-      sort_order: maxOrder,
-    } as any);
-    if (error) {
-      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      await externalDb.admin.insert('point_b_questions', {
+        user_id: userId,
+        question_text: pointBFormText.trim(),
+        sort_order: maxOrder,
+      });
       toast({ title: 'Вопрос добавлен' });
       setShowPointBForm(false);
       setPointBFormText('');
       loadClientData(userId);
+    } catch (error: any) {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
     }
   };
 
   const handleUpdatePBQuestion = async (id: string, text: string) => {
-    await supabase.from('point_b_questions').update({ question_text: text } as any).eq('id', id);
-    setEditingPBId(null);
-    loadClientData(userId!);
+    try {
+      await externalDb.admin.update('point_b_questions', { question_text: text }, { id });
+      setEditingPBId(null);
+      loadClientData(userId!);
+    } catch (err) {
+      console.error('Failed to update PB question:', err);
+    }
   };
 
   const handleDeletePBQuestion = async (id: string) => {
-    await supabase.from('point_b_questions').delete().eq('id', id);
-    loadClientData(userId!);
+    try {
+      await externalDb.admin.delete('point_b_questions', { id });
+      loadClientData(userId!);
+    } catch (err) {
+      console.error('Failed to delete PB question:', err);
+    }
   };
 
   if (loading) {
@@ -396,9 +439,13 @@ const AdminClientView = () => {
                     return;
                   }
                   const currentFiles = s.files || [];
-                  await supabase.from('sessions').update({ files: [...currentFiles, path] } as any).eq('id', s.id);
-                  toast({ title: 'Файл загружен' });
-                  loadClientData(userId);
+                  try {
+                    await externalDb.admin.update('sessions', { files: [...currentFiles, path] }, { id: s.id });
+                    toast({ title: 'Файл загружен' });
+                    loadClientData(userId);
+                  } catch (err) {
+                    console.error('Failed to update session files:', err);
+                  }
                 }} />
               </label>
             </div>
