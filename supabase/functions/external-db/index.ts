@@ -9,11 +9,13 @@ const corsHeaders = {
 const SCHEMA = "mentoring";
 
 function getPool() {
-  const host = Deno.env.get("POSTGRESQL_HOST");
-  const port = Deno.env.get("POSTGRESQL_PORT");
-  const user = Deno.env.get("POSTGRESQL_USER");
-  const password = Deno.env.get("POSTGRESQL_PASSWORD");
-  const database = Deno.env.get("POSTGRESQL_DBNAME");
+  // Strip leading "=" from env values (in case they were saved with KEY=VALUE format)
+  const strip = (v: string | undefined) => v?.replace(/^=/, "") || "";
+  const host = strip(Deno.env.get("POSTGRESQL_HOST"));
+  const port = strip(Deno.env.get("POSTGRESQL_PORT"));
+  const user = strip(Deno.env.get("POSTGRESQL_USER"));
+  const password = strip(Deno.env.get("POSTGRESQL_PASSWORD"));
+  const database = strip(Deno.env.get("POSTGRESQL_DBNAME"));
 
   console.log("DB connection config:", { host, port, user, database, hasPwd: !!password });
 
