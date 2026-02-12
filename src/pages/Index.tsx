@@ -30,8 +30,9 @@ const Index = () => {
   // Data states
   const [goals, setGoals] = useState(initialGoals);
   const [protocols, setProtocols] = useState(initialProtocols);
-  const [sessions] = useState(initialSessions);
+  const [sessions, setSessions] = useState(initialSessions);
   const [diaryEntries, setDiaryEntries] = useState(initialDiaryEntries);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [volcanoes, setVolcanoes] = useState(initialVolcanoes);
   const [progressMetrics, setProgressMetrics] = useState(initialProgressMetrics);
   const [roadmaps, setRoadmaps] = useState(initialRoadmaps);
@@ -59,18 +60,132 @@ const Index = () => {
   const [isPointAModalOpen, setIsPointAModalOpen] = useState(false);
   const [isPointBModalOpen, setIsPointBModalOpen] = useState(false);
 
-  // Load Point B questions
+  // Load all data from DB
   useEffect(() => {
     if (!user) return;
-    const loadPointB = async () => {
-      const { data: questions } = await supabase.from('point_b_questions').select('*').eq('user_id', user.id).order('sort_order');
-      setPointBQuestions(questions ?? []);
-      const { data: answers } = await supabase.from('point_b_answers').select('*').eq('user_id', user.id);
+    const load = async () => {
+      const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes] = await Promise.all([
+        supabase.from('goals').select('*').eq('user_id', user.id),
+        supabase.from('sessions').select('*').eq('user_id', user.id).order('session_number'),
+        supabase.from('protocols').select('*').eq('user_id', user.id),
+        supabase.from('roadmaps').select('*, roadmap_steps(*)').eq('user_id', user.id),
+        supabase.from('volcanoes').select('*').eq('user_id', user.id),
+        supabase.from('progress_metrics').select('*').eq('user_id', user.id),
+        supabase.from('route_info').select('*').eq('user_id', user.id).maybeSingle(),
+        supabase.from('diary_entries').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('point_b_questions').select('*').eq('user_id', user.id).order('sort_order'),
+        supabase.from('point_b_answers').select('*').eq('user_id', user.id),
+      ]);
+
+      // Goals
+      if (goalsRes.data && goalsRes.data.length > 0) {
+        setGoals(goalsRes.data.map((g: any) => ({
+          id: g.id,
+          title: g.title,
+          amount: g.amount || '',
+          hasAmount: g.has_amount,
+          progress: g.progress,
+        })));
+      }
+
+      // Sessions
+      if (sessionsRes.data && sessionsRes.data.length > 0) {
+        setSessions(sessionsRes.data.map((s: any) => ({
+          number: s.session_number,
+          date: s.session_date,
+          time: s.session_time,
+          summary: s.summary,
+          steps: s.steps || [],
+          gradient: s.gradient,
+          files: s.files || [],
+        })));
+      }
+
+      // Protocols
+      if (protocolsRes.data && protocolsRes.data.length > 0) {
+        setProtocols(protocolsRes.data.map((p: any) => ({
+          id: p.id,
+          title: p.title,
+          desc: p.description,
+          icon: p.icon,
+          color: p.color,
+          fileName: p.file_name,
+        })));
+      }
+
+      // Roadmaps
+      if (roadmapsRes.data && roadmapsRes.data.length > 0) {
+        setRoadmaps(roadmapsRes.data.map((r: any) => ({
+          id: r.id,
+          title: r.title,
+          status: r.status,
+          description: r.description,
+          steps: (r.roadmap_steps || [])
+            .sort((a: any, b: any) => a.sort_order - b.sort_order)
+            .map((st: any) => ({
+              text: st.text,
+              done: st.done,
+              deadline: st.deadline || '',
+            })),
+        })));
+      }
+
+      // Volcanoes
+      if (volcanoesRes.data && volcanoesRes.data.length > 0) {
+        setVolcanoes(volcanoesRes.data.map((v: any) => ({
+          name: v.name,
+          value: v.value,
+          comment: v.comment,
+        })));
+      }
+
+      // Metrics
+      if (metricsRes.data && metricsRes.data.length > 0) {
+        const mapped: Record<string, any> = {};
+        metricsRes.data.forEach((m: any) => {
+          mapped[m.metric_key] = {
+            label: m.label,
+            current: m.current_value,
+            previous: m.previous_value,
+          };
+        });
+        setProgressMetrics(prev => ({ ...prev, ...mapped }));
+      }
+
+      // Route info
+      if (routeRes.data) {
+        setRouteInfo({
+          sessionsTotal: routeRes.data.sessions_total,
+          sessionsDone: routeRes.data.sessions_done,
+          timeWeeks: routeRes.data.time_weeks,
+          resources: routeRes.data.resources || [],
+        });
+      }
+
+      // Diary
+      if (diaryRes.data && diaryRes.data.length > 0) {
+        setDiaryEntries(diaryRes.data.map((d: any) => ({
+          id: d.id,
+          type: d.entry_type as 'daily' | 'weekly',
+          date: d.entry_date,
+          energy: d.energy ?? undefined,
+          text: d.text ?? undefined,
+          intent: d.intent ?? undefined,
+          achievements: d.achievements ?? undefined,
+          lessons: d.lessons ?? undefined,
+          nextStep: d.next_step ?? undefined,
+        })));
+      }
+
+      // Point B
+      setPointBQuestions(questionsRes.data ?? []);
       const answerMap: Record<string, string> = {};
-      (answers ?? []).forEach((a: any) => { answerMap[a.question_id] = a.answer_text; });
+      (answersRes.data ?? []).forEach((a: any) => { answerMap[a.question_id] = a.answer_text; });
       setPointBAnswers(answerMap);
+
+      setDataLoaded(true);
     };
-    loadPointB();
+    load();
   }, [user]);
 
   // Auto-hide notification
