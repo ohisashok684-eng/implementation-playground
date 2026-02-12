@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Target, FileText, Activity } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { externalDb } from '@/lib/externalDb';
 
 interface ClientSummary {
   id: string;
@@ -24,7 +25,7 @@ const AdminDashboard = () => {
   }, []);
 
   const loadData = async () => {
-    // Load profiles (excluding super_admins)
+    // Load profiles (excluding super_admins) - profiles stay on Supabase
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, user_id, full_name, email, is_blocked');
@@ -37,27 +38,23 @@ const AdminDashboard = () => {
     const adminIds = new Set(adminRoles?.map(r => r.user_id) ?? []);
     const userProfiles = (profiles ?? []).filter(p => !adminIds.has(p.user_id));
 
-    // Count goals and sessions per user
+    // Count goals and sessions per user from external DB
     const summaries: ClientSummary[] = [];
     let totalSessions = 0;
 
     for (const p of userProfiles) {
-      const { count: goalsCount } = await supabase
-        .from('goals')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', p.user_id);
-
-      const { count: sessionsCount } = await supabase
-        .from('sessions')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', p.user_id);
-
-      totalSessions += sessionsCount ?? 0;
-      summaries.push({
-        ...p,
-        goals_count: goalsCount ?? 0,
-        sessions_count: sessionsCount ?? 0,
-      });
+      try {
+        const [goalsRes, sessionsRes] = await Promise.all([
+          externalDb.admin.select('goals', { filters: { user_id: p.user_id } }),
+          externalDb.admin.select('sessions', { filters: { user_id: p.user_id } }),
+        ]);
+        const goalsCount = goalsRes.data?.length ?? 0;
+        const sessionsCount = sessionsRes.data?.length ?? 0;
+        totalSessions += sessionsCount;
+        summaries.push({ ...p, goals_count: goalsCount, sessions_count: sessionsCount });
+      } catch {
+        summaries.push({ ...p, goals_count: 0, sessions_count: 0 });
+      }
     }
 
     setClients(summaries);

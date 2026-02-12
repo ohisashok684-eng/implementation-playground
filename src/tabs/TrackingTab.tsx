@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Sparkles, Target, BookOpen, X } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { externalDb } from '@/lib/externalDb';
 import type { DiaryEntry } from '@/types/mentoring';
 
 interface TrackingQuestion {
@@ -32,15 +32,17 @@ const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly }: Tracki
   }, [userId]);
 
   const loadQuestions = async () => {
-    const { data } = await supabase
-      .from('tracking_questions')
-      .select('*')
-      .eq('user_id', userId)
-      .order('sort_order');
-
-    const questions = (data ?? []) as TrackingQuestion[];
-    setDailyQuestions(questions.filter(q => q.question_type === 'daily'));
-    setWeeklyQuestions(questions.filter(q => q.question_type === 'weekly'));
+    try {
+      const res = await externalDb.select('tracking_questions', {
+        filters: { user_id: userId },
+        order: { column: 'sort_order', ascending: true },
+      });
+      const questions = (res.data ?? []) as TrackingQuestion[];
+      setDailyQuestions(questions.filter(q => q.question_type === 'daily'));
+      setWeeklyQuestions(questions.filter(q => q.question_type === 'weekly'));
+    } catch (err) {
+      console.error('Error loading tracking questions:', err);
+    }
     setLoading(false);
   };
 
