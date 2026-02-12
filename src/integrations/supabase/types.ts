@@ -86,6 +86,56 @@ export type Database = {
         }
         Relationships: []
       }
+      point_b_answers: {
+        Row: {
+          answer_text: string
+          id: string
+          question_id: string
+          user_id: string
+        }
+        Insert: {
+          answer_text?: string
+          id?: string
+          question_id: string
+          user_id: string
+        }
+        Update: {
+          answer_text?: string
+          id?: string
+          question_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "point_b_answers_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "point_b_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      point_b_questions: {
+        Row: {
+          id: string
+          question_text: string
+          sort_order: number
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          question_text: string
+          sort_order?: number
+          user_id: string
+        }
+        Update: {
+          id?: string
+          question_text?: string
+          sort_order?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       point_b_results: {
         Row: {
           achieved: string

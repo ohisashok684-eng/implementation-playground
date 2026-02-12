@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Target, Map, Heart, FileText, Zap, Flag, Plus, Trash2, X, Upload, Check, Edit2, MessageSquare, GripVertical } from 'lucide-react';
+import { ArrowLeft, Target, Map, Heart, FileText, Zap, Flag, Plus, Trash2, X, Upload, Check, Edit2, MessageSquare, GripVertical, Rocket } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -21,6 +21,7 @@ const AdminClientView = () => {
   const [volcanoes, setVolcanoes] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any[]>([]);
   const [trackingQuestions, setTrackingQuestions] = useState<any[]>([]);
+  const [pointBQuestions, setPointBQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modal states
@@ -28,6 +29,7 @@ const AdminClientView = () => {
   const [showProtocolForm, setShowProtocolForm] = useState(false);
   const [showRoadmapForm, setShowRoadmapForm] = useState(false);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
+  const [showPointBForm, setShowPointBForm] = useState(false);
   const [editingRoadmap, setEditingRoadmap] = useState<string | null>(null);
 
   // Session form
@@ -56,12 +58,17 @@ const AdminClientView = () => {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editingQuestionText, setEditingQuestionText] = useState('');
 
+  // Point B question form
+  const [pointBFormText, setPointBFormText] = useState('');
+  const [editingPBId, setEditingPBId] = useState<string | null>(null);
+  const [editingPBText, setEditingPBText] = useState('');
+
   useEffect(() => {
     if (userId) loadClientData(userId);
   }, [userId]);
 
   const loadClientData = async (uid: string) => {
-    const [profileRes, goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes] = await Promise.all([
+    const [profileRes, goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes, pbQuestionsRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
       supabase.from('goals').select('*').eq('user_id', uid).order('created_at'),
       supabase.from('roadmaps').select('*, roadmap_steps(*)').eq('user_id', uid).order('created_at'),
@@ -71,6 +78,7 @@ const AdminClientView = () => {
       supabase.from('volcanoes').select('*').eq('user_id', uid),
       supabase.from('progress_metrics').select('*').eq('user_id', uid),
       supabase.from('tracking_questions').select('*').eq('user_id', uid).order('sort_order'),
+      supabase.from('point_b_questions').select('*').eq('user_id', uid).order('sort_order'),
     ]);
 
     setProfile(profileRes.data);
@@ -82,6 +90,7 @@ const AdminClientView = () => {
     setVolcanoes(volcanoesRes.data ?? []);
     setMetrics(metricsRes.data ?? []);
     setTrackingQuestions(questionsRes.data ?? []);
+    setPointBQuestions(pbQuestionsRes.data ?? []);
     setLoading(false);
 
     // Pre-fill session number
@@ -226,6 +235,36 @@ const AdminClientView = () => {
 
   const handleDeleteQuestion = async (id: string) => {
     await supabase.from('tracking_questions').delete().eq('id', id);
+    loadClientData(userId!);
+  };
+
+  // === POINT B QUESTIONS ===
+  const handleSavePointBQuestion = async () => {
+    if (!userId || !pointBFormText.trim()) return;
+    const maxOrder = pointBQuestions.length;
+    const { error } = await supabase.from('point_b_questions').insert({
+      user_id: userId,
+      question_text: pointBFormText.trim(),
+      sort_order: maxOrder,
+    } as any);
+    if (error) {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Вопрос добавлен' });
+      setShowPointBForm(false);
+      setPointBFormText('');
+      loadClientData(userId);
+    }
+  };
+
+  const handleUpdatePBQuestion = async (id: string, text: string) => {
+    await supabase.from('point_b_questions').update({ question_text: text } as any).eq('id', id);
+    setEditingPBId(null);
+    loadClientData(userId!);
+  };
+
+  const handleDeletePBQuestion = async (id: string) => {
+    await supabase.from('point_b_questions').delete().eq('id', id);
     loadClientData(userId!);
   };
 
@@ -571,6 +610,50 @@ const AdminClientView = () => {
               </select>
             </div>
             <button onClick={handleSaveQuestion} className="w-full py-4 btn-dark">Добавить вопрос</button>
+          </div>
+        </div>
+      )}
+
+      {/* ========== POINT B QUESTIONS ========== */}
+      <Section title="Вопросы «Точка Б»" icon={Rocket} action={<AddButton onClick={() => setShowPointBForm(true)} label="Добавить" />}>
+        {pointBQuestions.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Вопросов для итогов менторства нет</p>
+        ) : (
+          <div className="space-y-2">
+            {pointBQuestions.map(q => (
+              <div key={q.id} className="glass card-round p-3 flex items-center space-x-2 group">
+                <div className="flex-1">
+                  {editingPBId === q.id ? (
+                    <input autoFocus value={editingPBText}
+                      onChange={e => setEditingPBText(e.target.value)}
+                      onBlur={() => handleUpdatePBQuestion(q.id, editingPBText)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleUpdatePBQuestion(q.id, editingPBText); }}
+                      className="w-full text-xs bg-transparent border-b border-secondary/30 focus:outline-none py-1" />
+                  ) : (
+                    <p className="text-xs text-foreground">{q.question_text}</p>
+                  )}
+                </div>
+                <button onClick={() => { setEditingPBId(q.id); setEditingPBText(q.question_text); }} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"><Edit2 size={12} /></button>
+                <button onClick={() => handleDeletePBQuestion(q.id)} className="opacity-0 group-hover:opacity-100 text-destructive transition-opacity"><Trash2 size={12} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/* Point B Question Form Modal */}
+      {showPointBForm && (
+        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
+          <div className="glass-strong card-round-lg w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-foreground">Новый вопрос «Точка Б»</h3>
+              <button onClick={() => setShowPointBForm(false)} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
+            </div>
+            <div className="space-y-1">
+              <p className="label-tiny">Текст вопроса</p>
+              <input value={pointBFormText} onChange={e => setPointBFormText(e.target.value)} className="input-glass" placeholder="Что удалось достичь?" />
+            </div>
+            <button onClick={handleSavePointBQuestion} className="w-full py-4 btn-dark">Добавить вопрос</button>
           </div>
         </div>
       )}

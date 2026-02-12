@@ -18,8 +18,8 @@ import {
   initialProgressMetrics,
   initialRoadmaps,
   initialRouteInfo,
-  initialPointB,
 } from '@/data/initialData';
+import { supabase } from '@/integrations/supabase/client';
 import type { TabId, Goal, DiaryEntry } from '@/types/mentoring';
 
 const Index = () => {
@@ -37,8 +37,9 @@ const Index = () => {
   const [roadmaps, setRoadmaps] = useState(initialRoadmaps);
   const [routeInfo, setRouteInfo] = useState(initialRouteInfo);
 
-  // Point B editable state
-  const [resultsB, setResultsB] = useState(initialPointB);
+  // Point B dynamic state
+  const [pointBQuestions, setPointBQuestions] = useState<any[]>([]);
+  const [pointBAnswers, setPointBAnswers] = useState<Record<string, string>>({});
   const [savedStatusB, setSavedStatusB] = useState<string | null>(null);
 
   // Volcano saved status
@@ -57,6 +58,20 @@ const Index = () => {
 
   const [isPointAModalOpen, setIsPointAModalOpen] = useState(false);
   const [isPointBModalOpen, setIsPointBModalOpen] = useState(false);
+
+  // Load Point B questions
+  useEffect(() => {
+    if (!user) return;
+    const loadPointB = async () => {
+      const { data: questions } = await supabase.from('point_b_questions').select('*').eq('user_id', user.id).order('sort_order');
+      setPointBQuestions(questions ?? []);
+      const { data: answers } = await supabase.from('point_b_answers').select('*').eq('user_id', user.id);
+      const answerMap: Record<string, string> = {};
+      (answers ?? []).forEach((a: any) => { answerMap[a.question_id] = a.answer_text; });
+      setPointBAnswers(answerMap);
+    };
+    loadPointB();
+  }, [user]);
 
   // Auto-hide notification
   useEffect(() => {
@@ -145,8 +160,15 @@ const Index = () => {
   };
 
   // Point B handlers
-  const fixResultB = (field: string) => {
-    setSavedStatusB(field);
+  const fixResultB = async (questionId: string) => {
+    if (!user) return;
+    const text = pointBAnswers[questionId] || '';
+    await supabase.from('point_b_answers').upsert({
+      user_id: user.id,
+      question_id: questionId,
+      answer_text: text,
+    } as any, { onConflict: 'user_id,question_id' });
+    setSavedStatusB(questionId);
     setTimeout(() => setSavedStatusB(null), 1500);
   };
 
@@ -474,10 +496,10 @@ const Index = () => {
           <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <Rocket size={20} className="text-purple-600" />
+                <Rocket size={20} className="text-secondary" />
                 <h2 className="text-xl font-black text-foreground">Итоги менторства</h2>
               </div>
-              <button onClick={() => setIsPointBModalOpen(false)} className="text-slate-300 hover:text-slate-600 p-2">
+              <button onClick={() => setIsPointBModalOpen(false)} className="text-muted-foreground hover:text-foreground p-2">
                 <X size={24} />
               </button>
             </div>
@@ -486,76 +508,35 @@ const Index = () => {
               Заполняется на итоговой сессии. Анализ достижений и пройденного пути
             </p>
 
-            <div className="space-y-5">
-              {/* Achieved */}
-              <div className="space-y-2">
-                <p className="label-tiny">Что удалось достичь?</p>
-                <div className="relative">
-                  <textarea
-                    value={resultsB.achieved}
-                    onChange={(e) => setResultsB({ ...resultsB, achieved: e.target.value })}
-                    rows={4}
-                    className="w-full p-4 pr-12 bg-white border border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-purple-200 resize-none font-medium text-slate-700 leading-relaxed shadow-sm transition-all"
-                  />
-                  <button
-                    onClick={() => fixResultB('achieved')}
-                    className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
-                      savedStatusB === 'achieved'
-                        ? 'bg-[#D9FF5F] text-[#8EAC24] scale-105'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
-                    }`}
-                  >
-                    <Check size={14} className={savedStatusB === 'achieved' ? 'animate-in' : ''} />
-                  </button>
-                </div>
+            {pointBQuestions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Вопросы для итогов менторства пока не добавлены</p>
+            ) : (
+              <div className="space-y-5">
+                {pointBQuestions.map((q) => (
+                  <div key={q.id} className="space-y-2">
+                    <p className="label-tiny">{q.question_text}</p>
+                    <div className="relative">
+                      <textarea
+                        value={pointBAnswers[q.id] || ''}
+                        onChange={(e) => setPointBAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                        rows={4}
+                        className="input-glass pr-12 resize-none leading-relaxed"
+                      />
+                      <button
+                        onClick={() => fixResultB(q.id)}
+                        className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
+                          savedStatusB === q.id
+                            ? 'bg-primary text-primary-foreground scale-105'
+                            : 'bg-foreground text-background hover:bg-foreground/80'
+                        }`}
+                      >
+                        <Check size={14} className={savedStatusB === q.id ? 'animate-in' : ''} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              {/* Failed */}
-              <div className="space-y-2">
-                <p className="label-tiny">Что не получилось и почему?</p>
-                <div className="relative">
-                  <textarea
-                    value={resultsB.notAchieved}
-                    onChange={(e) => setResultsB({ ...resultsB, notAchieved: e.target.value })}
-                    rows={4}
-                    className="w-full p-4 pr-12 bg-white border border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-purple-200 resize-none font-medium text-slate-700 leading-relaxed shadow-sm transition-all"
-                  />
-                  <button
-                    onClick={() => fixResultB('failed')}
-                    className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
-                      savedStatusB === 'failed'
-                        ? 'bg-[#D9FF5F] text-[#8EAC24] scale-105'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
-                    }`}
-                  >
-                    <Check size={14} className={savedStatusB === 'failed' ? 'animate-in' : ''} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Analysis */}
-              <div className="space-y-2">
-                <p className="label-tiny">Анализ пройденного пути</p>
-                <div className="relative">
-                  <textarea
-                    value={resultsB.analysis}
-                    onChange={(e) => setResultsB({ ...resultsB, analysis: e.target.value })}
-                    rows={4}
-                    className="w-full p-4 pr-12 bg-white border border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-purple-200 resize-none font-medium text-slate-700 leading-relaxed italic shadow-sm transition-all"
-                  />
-                  <button
-                    onClick={() => fixResultB('analysis')}
-                    className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
-                      savedStatusB === 'analysis'
-                        ? 'bg-[#D9FF5F] text-[#8EAC24] scale-105'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
-                    }`}
-                  >
-                    <Check size={14} className={savedStatusB === 'analysis' ? 'animate-in' : ''} />
-                  </button>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
