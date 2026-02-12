@@ -71,7 +71,7 @@ const AdminClientView = () => {
   const loadClientData = async (uid: string) => {
     try {
       const [profileRes, goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes, pbQuestionsRes] = await Promise.all([
-        externalDb.admin.select('profiles', { filters: { user_id: uid } }),
+        supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
         externalDb.admin.select('goals', { filters: { user_id: uid }, order: { column: 'created_at' } }),
         externalDb.admin.select('roadmaps', { filters: { user_id: uid }, order: { column: 'created_at' }, withSteps: true }),
         externalDb.admin.select('sessions', { filters: { user_id: uid }, order: { column: 'session_number', ascending: false } }),
@@ -83,7 +83,7 @@ const AdminClientView = () => {
         externalDb.admin.select('point_b_questions', { filters: { user_id: uid }, order: { column: 'sort_order' } }),
       ]);
 
-      setProfile((profileRes.data ?? [])[0] || null);
+      setProfile(profileRes.data || null);
       setGoals(goalsRes.data ?? []);
       setRoadmaps(roadmapsRes.data ?? []);
       setSessions(sessionsRes.data ?? []);
