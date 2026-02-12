@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, Circle, Trash2, Plus, Pencil, X, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { externalDb } from '@/lib/externalDb';
 import type { Roadmap } from '@/types/mentoring';
 
 interface RoadmapsTabProps {
@@ -13,7 +14,12 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
 
   const selectedRoadmap = roadmaps.find((rm) => rm.id === selectedRoadmapId);
 
-  const updateStep = (roadmapId: number, stepIndex: number, fields: Partial<{ text: string; done: boolean; deadline: string }>) => {
+  const updateStep = async (roadmapId: number, stepIndex: number, fields: Partial<{ text: string; done: boolean; deadline: string }>) => {
+    const roadmap = roadmaps.find(rm => rm.id === roadmapId);
+    if (!roadmap) return;
+    const step = roadmap.steps[stepIndex];
+    
+    // Update local state
     onUpdateRoadmaps(
       roadmaps.map((rm) => {
         if (rm.id === roadmapId) {
@@ -24,9 +30,29 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
         return rm;
       })
     );
+
+    // Persist to DB - find the step's DB id from roadmap_steps
+    try {
+      const res = await externalDb.select('roadmap_steps', {
+        filters: { roadmap_id: String(roadmapId) },
+        order: { column: 'sort_order', ascending: true },
+      });
+      const dbSteps = res.data ?? [];
+      const dbStep = dbSteps[stepIndex];
+      if (dbStep) {
+        await externalDb.update('roadmap_steps', fields, { id: dbStep.id });
+      }
+    } catch (err) {
+      console.error('Failed to persist step update:', err);
+    }
   };
 
-  const addStep = (roadmapId: number) => {
+  const addStep = async (roadmapId: number) => {
+    const roadmap = roadmaps.find(rm => rm.id === roadmapId);
+    if (!roadmap) return;
+    const sortOrder = roadmap.steps.length;
+
+    // Update local state
     onUpdateRoadmaps(
       roadmaps.map((rm) => {
         if (rm.id === roadmapId) {
@@ -35,9 +61,21 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
         return rm;
       })
     );
+
+    // Persist to DB
+    try {
+      await externalDb.insert('roadmap_steps', {
+        roadmap_id: String(roadmapId),
+        text: '',
+        sort_order: sortOrder,
+      });
+    } catch (err) {
+      console.error('Failed to persist new step:', err);
+    }
   };
 
-  const removeStep = (roadmapId: number, stepIndex: number) => {
+  const removeStep = async (roadmapId: number, stepIndex: number) => {
+    // Update local state
     onUpdateRoadmaps(
       roadmaps.map((rm) => {
         if (rm.id === roadmapId) {
@@ -46,6 +84,21 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
         return rm;
       })
     );
+
+    // Persist to DB
+    try {
+      const res = await externalDb.select('roadmap_steps', {
+        filters: { roadmap_id: String(roadmapId) },
+        order: { column: 'sort_order', ascending: true },
+      });
+      const dbSteps = res.data ?? [];
+      const dbStep = dbSteps[stepIndex];
+      if (dbStep) {
+        await externalDb.delete('roadmap_steps', { id: dbStep.id });
+      }
+    } catch (err) {
+      console.error('Failed to persist step deletion:', err);
+    }
   };
 
   const statusColor = (status: string) => {
