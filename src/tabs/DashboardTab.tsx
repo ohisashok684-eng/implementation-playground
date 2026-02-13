@@ -199,7 +199,7 @@ const DashboardTab = ({
             {/* Steps */}
             {s.steps.length > 0 && (
               <div className="space-y-1.5 pt-2 border-t border-foreground/10">
-                <p className="text-[10px] font-bold text-foreground/50 uppercase tracking-widest">После сессии:</p>
+                <p className="text-[10px] font-bold text-foreground/50 uppercase tracking-widest">Шаги:</p>
                 {s.steps.map((step, i) => (
                   <div key={i} className="flex items-start space-x-2">
                     <CheckCircle2 size={14} className="text-foreground/30 mt-0.5 flex-shrink-0" />
