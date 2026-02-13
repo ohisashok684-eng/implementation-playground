@@ -451,6 +451,47 @@ const AdminClientView = () => {
     }
   };
 
+  // === DELETE HANDLERS ===
+  const handleDeleteSession = async (id: string) => {
+    if (!confirm('Удалить эту сессию?')) return;
+    try {
+      await externalDb.admin.delete('sessions', { id });
+      toast({ title: 'Сессия удалена' });
+      loadClientData(userId!);
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteProtocol = async (id: string) => {
+    if (!confirm('Удалить этот протокол?')) return;
+    try {
+      await externalDb.admin.delete('protocols', { id });
+      toast({ title: 'Протокол удалён' });
+      loadClientData(userId!);
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteRoadmap = async (id: string) => {
+    if (!confirm('Удалить эту дорожную карту и все её шаги?')) return;
+    try {
+      // Delete steps first
+      const roadmap = roadmaps.find(r => r.id === id);
+      if (roadmap?.roadmap_steps) {
+        for (const step of roadmap.roadmap_steps) {
+          await externalDb.admin.delete('roadmap_steps', { id: step.id });
+        }
+      }
+      await externalDb.admin.delete('roadmaps', { id });
+      toast({ title: 'Дорожная карта удалена' });
+      loadClientData(userId!);
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err.message, variant: 'destructive' });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -528,6 +569,7 @@ const AdminClientView = () => {
                 <div className="flex items-center space-x-2">
                   <span className="text-[10px] text-muted-foreground">{s.session_date} · {s.session_time}</span>
                   <button onClick={() => openEditSession(s)} className="text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={14} /></button>
+                  <button onClick={() => handleDeleteSession(s.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></button>
                 </div>
               </div>
               <p className="text-xs text-foreground">{s.summary}</p>
@@ -658,7 +700,10 @@ const AdminClientView = () => {
             <div key={p.id} className="glass card-round p-4 space-y-1">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-bold text-foreground">{p.title}</p>
-                <button onClick={() => openEditProtocol(p)} className="text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={14} /></button>
+                <div className="flex items-center space-x-2">
+                  <button onClick={() => openEditProtocol(p)} className="text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={14} /></button>
+                  <button onClick={() => handleDeleteProtocol(p.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></button>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">{p.description}</p>
               {p.file_name && (
@@ -723,6 +768,7 @@ const AdminClientView = () => {
                 <div className="flex items-center space-x-2">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase">{r.status}</span>
                   <button onClick={() => openEditRoadmapMeta(r)} className="text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={14} /></button>
+                  <button onClick={() => handleDeleteRoadmap(r.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></button>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">{r.description}</p>
