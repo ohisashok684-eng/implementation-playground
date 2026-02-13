@@ -14,17 +14,19 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    let cancelled = false;
     const loadUrls = async () => {
-      const urls: Record<string, string> = {};
+      const newUrls: Record<string, string> = {};
       for (const rm of roadmaps) {
         if (rm.fileUrl) {
           const url = await getSignedUrl(rm.fileUrl);
-          if (url) urls[rm.fileUrl] = url;
+          if (url && !cancelled) newUrls[rm.fileUrl] = url;
         }
       }
-      setSignedUrls(urls);
+      if (!cancelled) setSignedUrls(prev => ({ ...prev, ...newUrls }));
     };
     loadUrls();
+    return () => { cancelled = true; };
   }, [roadmaps]);
 
   const selectedRoadmap = roadmaps.find((rm) => rm.id === selectedRoadmapId);
