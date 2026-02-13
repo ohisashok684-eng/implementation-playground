@@ -453,7 +453,6 @@ const AdminClientView = () => {
 
   // === DELETE HANDLERS ===
   const handleDeleteSession = async (id: string) => {
-    if (!confirm('Удалить эту сессию?')) return;
     try {
       await externalDb.admin.delete('sessions', { id });
       toast({ title: 'Сессия удалена' });
@@ -464,7 +463,6 @@ const AdminClientView = () => {
   };
 
   const handleDeleteProtocol = async (id: string) => {
-    if (!confirm('Удалить этот протокол?')) return;
     try {
       await externalDb.admin.delete('protocols', { id });
       toast({ title: 'Протокол удалён' });
@@ -475,9 +473,7 @@ const AdminClientView = () => {
   };
 
   const handleDeleteRoadmap = async (id: string) => {
-    if (!confirm('Удалить эту дорожную карту и все её шаги?')) return;
     try {
-      // Delete steps first
       const roadmap = roadmaps.find(r => r.id === id);
       if (roadmap?.roadmap_steps) {
         for (const step of roadmap.roadmap_steps) {
