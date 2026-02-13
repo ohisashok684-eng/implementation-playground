@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
-import { Zap, Pencil, ExternalLink, FileText, Upload, Loader2 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Zap, Pencil, ExternalLink, FileText, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
-import { getSignedUrl } from '@/lib/openFile';
+import { openStorageFile } from '@/lib/openFile';
 import ModalOverlay from '@/components/ModalOverlay';
 import type { Protocol } from '@/types/mentoring';
 
@@ -24,23 +24,6 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempProtocol, setTempProtocol] = useState({ title: '', desc: '', fileName: '' });
   const [newFile, setNewFile] = useState<File | null>(null);
-  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadUrls = async () => {
-      const newUrls: Record<string, string> = {};
-      for (const p of protocols) {
-        if (p.fileUrl) {
-          const url = await getSignedUrl(p.fileUrl);
-          if (url && !cancelled) newUrls[p.fileUrl] = url;
-        }
-      }
-      if (!cancelled) setSignedUrls(prev => ({ ...prev, ...newUrls }));
-    };
-    loadUrls();
-    return () => { cancelled = true; };
-  }, [protocols]);
 
   const openEdit = (p: Protocol) => {
     setEditingId(p.id);
@@ -124,21 +107,14 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
               <Pencil size={14} />
             </button>
           </div>
-          {p.fileUrl && signedUrls[p.fileUrl] ? (
-            <a
-              href={signedUrls[p.fileUrl]}
-              target="_blank"
-              rel="noopener noreferrer"
+          {p.fileUrl ? (
+            <button
+              onClick={() => openStorageFile(p.fileUrl!)}
               className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
             >
               <ExternalLink size={14} />
               <span>Открыть файл</span>
-            </a>
-          ) : p.fileUrl ? (
-            <div className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest bg-muted text-muted-foreground">
-              <Loader2 size={14} className="animate-spin" />
-              <span>Загрузка ссылки...</span>
-            </div>
+            </button>
           ) : (
             <div className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest bg-muted text-muted-foreground cursor-not-allowed">
               <ExternalLink size={14} />
