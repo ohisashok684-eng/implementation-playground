@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Navigation, ChevronRight, Flag, Rocket, ArrowRight, Pencil, Plus, MessageSquare, FileText, ExternalLink, CheckCircle2, Circle, Trash2, X, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Navigation, ChevronRight, Flag, Rocket, ArrowRight, Pencil, Plus, MessageSquare, FileText, ExternalLink, CheckCircle2, Circle, Trash2, X } from 'lucide-react';
 import { externalDb } from '@/lib/externalDb';
-import { getSignedUrl } from '@/lib/openFile';
+import { openStorageFile } from '@/lib/openFile';
 import MetricRing from '@/components/MetricRing';
 import type { Goal, Session, ProgressMetric, RouteInfo } from '@/types/mentoring';
 
@@ -41,25 +41,6 @@ const DashboardTab = ({
   const [newStepText, setNewStepText] = useState('');
   const [editingStepIndex, setEditingStepIndex] = useState<number | null>(null);
   const [editingStepText, setEditingStepText] = useState('');
-  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadUrls = async () => {
-      const newUrls: Record<string, string> = {};
-      for (const s of sessions) {
-        for (const f of s.files) {
-          if (f && !newUrls[f]) {
-            const url = await getSignedUrl(f);
-            if (url && !cancelled) newUrls[f] = url;
-          }
-        }
-      }
-      if (!cancelled) setSignedUrls(prev => ({ ...prev, ...newUrls }));
-    };
-    loadUrls();
-    return () => { cancelled = true; };
-  }, [sessions]);
 
   const editingSession = sessions.find(s => s.id === editingStepsSessionId);
 
@@ -244,26 +225,14 @@ const DashboardTab = ({
             {s.files.length > 0 && (
               <div className="space-y-2">
                 {s.files.map((f, i) => (
-                  signedUrls[f] ? (
-                    <a
-                      key={i}
-                      href={signedUrls[f]}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
-                    >
-                      <ExternalLink size={14} />
-                      <span>Открыть файл {s.files.length > 1 ? i + 1 : ''}</span>
-                    </a>
-                  ) : (
-                    <div
-                      key={i}
-                      className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest bg-muted text-muted-foreground"
-                    >
-                      <Loader2 size={14} className="animate-spin" />
-                      <span>Загрузка ссылки...</span>
-                    </div>
-                  )
+                  <button
+                    key={i}
+                    onClick={() => openStorageFile(f)}
+                    className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
+                  >
+                    <ExternalLink size={14} />
+                    <span>Открыть файл {s.files.length > 1 ? i + 1 : ''}</span>
+                  </button>
                 ))}
               </div>
             )}

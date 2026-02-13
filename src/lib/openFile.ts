@@ -1,26 +1,25 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export const getSignedUrl = async (filePath: string): Promise<string | null> => {
+/**
+ * Opens a file from storage in a new tab.
+ * The window is opened synchronously (in click context) to avoid popup blockers,
+ * then the signed URL is loaded into it.
+ */
+export const openStorageFile = async (filePath: string): Promise<void> => {
+  // Open window SYNCHRONOUSLY in click handler context — no browser will block this
+  const newWindow = window.open('', '_blank');
+
   const { data, error } = await supabase.storage
     .from('mentoring-files')
     .createSignedUrl(filePath, 3600);
+
   if (error || !data?.signedUrl) {
     console.error('Failed to get signed URL:', error);
-    return null;
+    if (newWindow) newWindow.close();
+    return;
   }
-  return data.signedUrl;
-};
 
-export const openSignedFile = async (filePath: string): Promise<boolean> => {
-  const url = await getSignedUrl(filePath);
-  if (!url) return false;
-
-  const link = document.createElement('a');
-  link.href = url;
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  return true;
+  if (newWindow) {
+    newWindow.location.href = data.signedUrl;
+  }
 };
