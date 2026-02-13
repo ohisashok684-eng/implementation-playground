@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, Circle, Trash2, Plus, Pencil, X, ExternalLink } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
+import { openSignedFile } from '@/lib/openFile';
 import type { Roadmap } from '@/types/mentoring';
 
 interface RoadmapsTabProps {
@@ -135,15 +135,7 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
           </div>
           {rm.fileUrl && (
             <button
-              onClick={async () => {
-                const newWindow = window.open('', '_blank');
-                const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(rm.fileUrl!, 3600);
-                if (data?.signedUrl && newWindow) {
-                  newWindow.location.href = data.signedUrl;
-                } else {
-                  newWindow?.close();
-                }
-              }}
+              onClick={() => openSignedFile(rm.fileUrl!)}
               className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
             >
               <ExternalLink size={14} />

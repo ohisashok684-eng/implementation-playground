@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Navigation, ChevronRight, Flag, Rocket, ArrowRight, Pencil, Plus, MessageSquare, FileText, ExternalLink, CheckCircle2, Circle, Trash2, X } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
+import { openSignedFile } from '@/lib/openFile';
 import MetricRing from '@/components/MetricRing';
 import type { Goal, Session, ProgressMetric, RouteInfo } from '@/types/mentoring';
 
@@ -227,15 +227,7 @@ const DashboardTab = ({
                 {s.files.map((f, i) => (
                   <button
                     key={i}
-                    onClick={async () => {
-                      const newWindow = window.open('', '_blank');
-                      const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(f, 3600);
-                      if (data?.signedUrl && newWindow) {
-                        newWindow.location.href = data.signedUrl;
-                      } else {
-                        newWindow?.close();
-                      }
-                    }}
+                    onClick={() => openSignedFile(f)}
                     className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
                   >
                     <ExternalLink size={14} />
