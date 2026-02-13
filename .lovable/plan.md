@@ -2,26 +2,44 @@
 
 ## Проблема
 
-При создании пользователя через функцию `create-user` профиль и роль записываются только в **Supabase** (через триггер `handle_new_user`). Но:
+Файлы не открываются у пользователя по двум возможным причинам:
 
-- **AdminUsers** загружает `profiles` и `user_roles` из **внешней БД** (которая пустая) -- поэтому пользователи не отображаются
-- **AdminClientView** загружает `profiles` из **внешней БД** -- поэтому профиль не находится и показывается "Клиент не найден"
-- **AdminDashboard** загружает `profiles` из **Supabase** напрямую -- поэтому там данные видны
+1. **Блокировка всплывающих окон браузером** -- `window.open()` вызывается после `await` (асинхронно), а не напрямую из обработчика клика. Браузеры блокируют такие окна как попапы.
+
+2. **RLS-политика хранилища** -- хотя текущая политика должна работать, нужно убедиться, что она корректно пропускает запросы обычных пользователей.
 
 ## Решение
 
-Изменить `AdminUsers` и `AdminClientView` так, чтобы `profiles` и `user_roles` загружались из **Supabase** (как это уже сделано в `AdminDashboard`), а не из внешней БД. Эти таблицы управляются Supabase Auth и триггером, поэтому они всегда актуальны только в Supabase.
+Переписать логику открытия файлов во всех компонентах, чтобы:
+- Сначала открывать пустое окно синхронно (до `await`)
+- Затем менять URL этого окна на подписанную ссылку
+- Показывать ошибку, если получить ссылку не удалось
 
-### Изменения по файлам
+### Затронутые файлы
 
-**1. `src/pages/admin/AdminUsers.tsx`**
-- Заменить `externalDb.admin.select('profiles', ...)` на `supabase.from('profiles').select(...)`
-- Заменить `externalDb.admin.select('user_roles', ...)` на `supabase.from('user_roles').select(...)`
-- Заменить `externalDb.admin.update('profiles', ...)` в функции `toggleBlock` на `supabase.from('profiles').update(...)`
+1. **`src/tabs/ProtocolsTab.tsx`** -- функция `handleOpenFile`
+2. **`src/tabs/DashboardTab.tsx`** -- открытие файлов сессий (строки 230-232)
+3. **`src/tabs/RoadmapsTab.tsx`** -- открытие файлов дорожных карт (строки 113-116)
 
-**2. `src/pages/admin/AdminClientView.tsx`**
-- Заменить загрузку профиля `externalDb.admin.select('profiles', { filters: { user_id: uid } })` на `supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle()`
-- Все остальные таблицы (goals, sessions, protocols и т.д.) оставить на внешней БД как есть
+### Технические детали
 
-Это выровняет все три страницы админки на единый источник данных для профилей и ролей.
+Паттерн замены во всех трех файлах:
+
+```typescript
+// БЫЛО (блокируется браузером):
+const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(path, 3600);
+if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+
+// СТАЛО (работает корректно):
+const newWindow = window.open('', '_blank'); // открываем синхронно
+const { data, error } = await supabase.storage.from('mentoring-files').createSignedUrl(path, 3600);
+if (data?.signedUrl && newWindow) {
+  newWindow.location.href = data.signedUrl;
+} else {
+  newWindow?.close();
+  // показать ошибку
+}
+```
+
+Также добавлю дополнительную RLS-политику для надежности -- разрешение на `SELECT` для аутентифицированных пользователей, чьи файлы лежат в папке с их user ID.
 
