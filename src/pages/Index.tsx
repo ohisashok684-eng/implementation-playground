@@ -66,18 +66,20 @@ const Index = () => {
     if (!user) return;
     const load = async () => {
       try {
-        const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes] = await Promise.all([
-          externalDb.select('goals', { filters: { user_id: user.id } }),
-          externalDb.select('sessions', { filters: { user_id: user.id }, order: { column: 'session_number', ascending: true } }),
-          externalDb.select('protocols', { filters: { user_id: user.id } }),
-          externalDb.select('roadmaps', { filters: { user_id: user.id }, withSteps: true }),
-          externalDb.select('volcanoes', { filters: { user_id: user.id } }),
-          externalDb.select('progress_metrics', { filters: { user_id: user.id } }),
-          externalDb.select('route_info', { filters: { user_id: user.id }, single: true }),
-          externalDb.select('diary_entries', { filters: { user_id: user.id }, order: { column: 'created_at', ascending: false } }),
-          externalDb.select('point_b_questions', { filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } }),
-          externalDb.select('point_b_answers', { filters: { user_id: user.id } }),
+        const batchResponse = await externalDb.batch([
+          { action: 'select', table: 'goals', filters: { user_id: user.id } },
+          { action: 'select', table: 'sessions', filters: { user_id: user.id }, order: { column: 'session_number', ascending: true } },
+          { action: 'select', table: 'protocols', filters: { user_id: user.id } },
+          { action: 'select', table: 'roadmaps', filters: { user_id: user.id }, withSteps: true },
+          { action: 'select', table: 'volcanoes', filters: { user_id: user.id } },
+          { action: 'select', table: 'progress_metrics', filters: { user_id: user.id } },
+          { action: 'select', table: 'route_info', filters: { user_id: user.id }, single: true },
+          { action: 'select', table: 'diary_entries', filters: { user_id: user.id }, order: { column: 'created_at', ascending: false } },
+          { action: 'select', table: 'point_b_questions', filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } },
+          { action: 'select', table: 'point_b_answers', filters: { user_id: user.id } },
         ]);
+
+        const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes] = batchResponse.results;
 
         // Goals
         if (goalsRes.data && goalsRes.data.length > 0) {

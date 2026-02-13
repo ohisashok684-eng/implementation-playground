@@ -31,6 +31,10 @@ export const externalDb = {
   /** Initialize schema on external DB */
   setup: () => call('setup'),
 
+  /** Execute multiple select queries in a single request */
+  batch: (queries: Array<{ action: string; table: string; [key: string]: any }>) =>
+    call('batch', { queries }),
+
   /** Select rows from a table */
   select: (
     table: string,
