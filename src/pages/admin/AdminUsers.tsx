@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react';
 import { Search, UserPlus, ShieldOff, Shield, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import ModalOverlay from '@/components/ModalOverlay';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface UserProfile {
   id: string;
@@ -22,6 +32,7 @@ const AdminUsers = () => {
   const [newName, setNewName] = useState('');
   const [addError, setAddError] = useState('');
   const [adding, setAdding] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -52,7 +63,6 @@ const AdminUsers = () => {
   };
 
   const handleDeleteUser = async (profile: UserProfile) => {
-    if (!confirm(`Удалить пользователя ${profile.full_name || profile.email}? Это действие необратимо.`)) return;
     try {
       const res = await supabase.functions.invoke('delete-user', {
         body: { user_id: profile.user_id },
@@ -61,9 +71,11 @@ const AdminUsers = () => {
         console.error('Delete failed:', res.data?.error || res.error?.message);
         return;
       }
-      setUsers(users.filter(u => u.id !== profile.id));
+      setUsers(prev => prev.filter(u => u.id !== profile.id));
     } catch (err) {
       console.error('Failed to delete user:', err);
+    } finally {
+      setDeletingUser(null);
     }
   };
 
@@ -153,7 +165,7 @@ const AdminUsers = () => {
                 {u.is_blocked ? <ShieldOff size={16} /> : <Shield size={16} />}
               </button>
               <button
-                onClick={() => handleDeleteUser(u)}
+                onClick={() => setDeletingUser(u)}
                 className="p-2 rounded-xl bg-muted text-muted-foreground hover:text-destructive transition-colors"
                 title="Удалить пользователя"
               >
@@ -205,6 +217,27 @@ const AdminUsers = () => {
           </button>
         </div>
       </ModalOverlay>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deletingUser} onOpenChange={(open) => { if (!open) setDeletingUser(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить пользователя?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deletingUser?.full_name || deletingUser?.email} будет удалён навсегда. Это действие необратимо.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deletingUser && handleDeleteUser(deletingUser)}
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
