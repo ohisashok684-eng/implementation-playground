@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Zap, Pencil, ExternalLink, FileText, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
+import { openSignedFile } from '@/lib/openFile';
 import ModalOverlay from '@/components/ModalOverlay';
 import type { Protocol } from '@/types/mentoring';
 
@@ -91,14 +92,8 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
       onNotify({ type: 'error', message: 'К этому протоколу не прикреплён файл' });
       return;
     }
-    const newWindow = window.open('', '_blank');
-    const { data, error } = await supabase.storage
-      .from('mentoring-files')
-      .createSignedUrl(filePath, 3600);
-    if (data?.signedUrl && newWindow) {
-      newWindow.location.href = data.signedUrl;
-    } else {
-      newWindow?.close();
+    const success = await openSignedFile(filePath);
+    if (!success) {
       onNotify({ type: 'error', message: 'Не удалось получить ссылку на файл' });
     }
   };
