@@ -91,15 +91,16 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
       onNotify({ type: 'error', message: 'К этому протоколу не прикреплён файл' });
       return;
     }
-    onNotify({ type: 'success', message: 'Открываем файл...' });
+    const newWindow = window.open('', '_blank');
     const { data, error } = await supabase.storage
       .from('mentoring-files')
       .createSignedUrl(filePath, 3600);
-    if (error || !data?.signedUrl) {
+    if (data?.signedUrl && newWindow) {
+      newWindow.location.href = data.signedUrl;
+    } else {
+      newWindow?.close();
       onNotify({ type: 'error', message: 'Не удалось получить ссылку на файл' });
-      return;
     }
-    window.open(data.signedUrl, '_blank');
   };
 
   return (

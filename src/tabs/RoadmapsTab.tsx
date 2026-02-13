@@ -136,8 +136,13 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
           {rm.fileUrl && (
             <button
               onClick={async () => {
+                const newWindow = window.open('', '_blank');
                 const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(rm.fileUrl!, 3600);
-                if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                if (data?.signedUrl && newWindow) {
+                  newWindow.location.href = data.signedUrl;
+                } else {
+                  newWindow?.close();
+                }
               }}
               className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
             >
