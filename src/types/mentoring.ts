@@ -17,6 +17,7 @@ export interface Protocol {
 }
 
 export interface Session {
+  id: string;
   number: number;
   date: string;
   time: string;

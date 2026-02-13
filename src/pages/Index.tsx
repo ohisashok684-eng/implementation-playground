@@ -93,6 +93,7 @@ const Index = () => {
         // Sessions
         if (sessionsRes.data && sessionsRes.data.length > 0) {
           setSessions(sessionsRes.data.map((s: any) => ({
+            id: s.id,
             number: s.session_number,
             date: s.session_date,
             time: s.session_time,
@@ -418,6 +419,7 @@ const Index = () => {
             onEditMetric={setEditingMetric}
             onOpenPointA={() => setIsPointAModalOpen(true)}
             onOpenPointB={() => setIsPointBModalOpen(true)}
+            onUpdateSessions={setSessions}
           />
         )}
         {activeTab === 'roadmaps' && (
