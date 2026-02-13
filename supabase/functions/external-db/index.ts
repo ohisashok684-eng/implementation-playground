@@ -74,7 +74,7 @@ function getPool() {
       user,
       password,
       database,
-      tls: { enabled: true },
+      tls: { enabled: true, enforce: false },
     },
     1,
     true
