@@ -44,19 +44,21 @@ const DashboardTab = ({
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    let cancelled = false;
     const loadUrls = async () => {
-      const urls: Record<string, string> = {};
+      const newUrls: Record<string, string> = {};
       for (const s of sessions) {
         for (const f of s.files) {
-          if (f && !urls[f]) {
+          if (f && !newUrls[f]) {
             const url = await getSignedUrl(f);
-            if (url) urls[f] = url;
+            if (url && !cancelled) newUrls[f] = url;
           }
         }
       }
-      setSignedUrls(urls);
+      if (!cancelled) setSignedUrls(prev => ({ ...prev, ...newUrls }));
     };
     loadUrls();
+    return () => { cancelled = true; };
   }, [sessions]);
 
   const editingSession = sessions.find(s => s.id === editingStepsSessionId);

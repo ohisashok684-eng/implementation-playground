@@ -27,17 +27,19 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    let cancelled = false;
     const loadUrls = async () => {
-      const urls: Record<string, string> = {};
+      const newUrls: Record<string, string> = {};
       for (const p of protocols) {
         if (p.fileUrl) {
           const url = await getSignedUrl(p.fileUrl);
-          if (url) urls[p.fileUrl] = url;
+          if (url && !cancelled) newUrls[p.fileUrl] = url;
         }
       }
-      setSignedUrls(urls);
+      if (!cancelled) setSignedUrls(prev => ({ ...prev, ...newUrls }));
     };
     loadUrls();
+    return () => { cancelled = true; };
   }, [protocols]);
 
   const openEdit = (p: Protocol) => {
