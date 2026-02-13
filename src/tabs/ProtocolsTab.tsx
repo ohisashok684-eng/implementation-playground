@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react';
-import { Zap, Pencil, ExternalLink, FileText, Upload } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Zap, Pencil, ExternalLink, FileText, Upload, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
-import { openSignedFile } from '@/lib/openFile';
+import { getSignedUrl } from '@/lib/openFile';
 import ModalOverlay from '@/components/ModalOverlay';
 import type { Protocol } from '@/types/mentoring';
 
@@ -24,6 +24,21 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempProtocol, setTempProtocol] = useState({ title: '', desc: '', fileName: '' });
   const [newFile, setNewFile] = useState<File | null>(null);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const loadUrls = async () => {
+      const urls: Record<string, string> = {};
+      for (const p of protocols) {
+        if (p.fileUrl) {
+          const url = await getSignedUrl(p.fileUrl);
+          if (url) urls[p.fileUrl] = url;
+        }
+      }
+      setSignedUrls(urls);
+    };
+    loadUrls();
+  }, [protocols]);
 
   const openEdit = (p: Protocol) => {
     setEditingId(p.id);
@@ -86,18 +101,6 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
     onNotify({ type: 'success', message: 'Протокол сохранён' });
   };
 
-  const handleOpenFile = async (protocol: Protocol) => {
-    const filePath = protocol.fileUrl;
-    if (!filePath) {
-      onNotify({ type: 'error', message: 'К этому протоколу не прикреплён файл' });
-      return;
-    }
-    const success = await openSignedFile(filePath);
-    if (!success) {
-      onNotify({ type: 'error', message: 'Не удалось получить ссылку на файл' });
-    }
-  };
-
   return (
     <div className="space-y-4 animate-in">
       <h2 className="text-xl font-black text-foreground">Протоколы</h2>
@@ -119,18 +122,27 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
               <Pencil size={14} />
             </button>
           </div>
-          <button
-            onClick={() => handleOpenFile(p)}
-            disabled={!p.fileUrl}
-            className={`w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg ${
-              p.fileUrl
-                ? 'bg-foreground text-white'
-                : 'bg-muted text-muted-foreground cursor-not-allowed'
-            }`}
-          >
-            <ExternalLink size={14} />
-            <span>Открыть файл</span>
-          </button>
+          {p.fileUrl && signedUrls[p.fileUrl] ? (
+            <a
+              href={signedUrls[p.fileUrl]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
+            >
+              <ExternalLink size={14} />
+              <span>Открыть файл</span>
+            </a>
+          ) : p.fileUrl ? (
+            <div className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest bg-muted text-muted-foreground">
+              <Loader2 size={14} className="animate-spin" />
+              <span>Загрузка ссылки...</span>
+            </div>
+          ) : (
+            <div className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest bg-muted text-muted-foreground cursor-not-allowed">
+              <ExternalLink size={14} />
+              <span>Файл не прикреплён</span>
+            </div>
+          )}
         </div>
       ))}
 

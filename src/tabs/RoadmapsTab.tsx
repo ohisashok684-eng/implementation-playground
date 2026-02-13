@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { CheckCircle2, Circle, Trash2, Plus, Pencil, X, ExternalLink } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CheckCircle2, Circle, Trash2, Plus, Pencil, X, ExternalLink, Loader2 } from 'lucide-react';
 import { externalDb } from '@/lib/externalDb';
-import { openSignedFile } from '@/lib/openFile';
+import { getSignedUrl } from '@/lib/openFile';
 import type { Roadmap } from '@/types/mentoring';
 
 interface RoadmapsTabProps {
@@ -11,6 +11,21 @@ interface RoadmapsTabProps {
 
 const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
   const [selectedRoadmapId, setSelectedRoadmapId] = useState<number | null>(null);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const loadUrls = async () => {
+      const urls: Record<string, string> = {};
+      for (const rm of roadmaps) {
+        if (rm.fileUrl) {
+          const url = await getSignedUrl(rm.fileUrl);
+          if (url) urls[rm.fileUrl] = url;
+        }
+      }
+      setSignedUrls(urls);
+    };
+    loadUrls();
+  }, [roadmaps]);
 
   const selectedRoadmap = roadmaps.find((rm) => rm.id === selectedRoadmapId);
 
@@ -133,15 +148,22 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
               {rm.steps.filter((s) => s.done).length}/{rm.steps.length}
             </span>
           </div>
-          {rm.fileUrl && (
-            <button
-              onClick={() => openSignedFile(rm.fileUrl!)}
+          {rm.fileUrl && signedUrls[rm.fileUrl] ? (
+            <a
+              href={signedUrls[rm.fileUrl]}
+              target="_blank"
+              rel="noopener noreferrer"
               className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
             >
               <ExternalLink size={14} />
               <span>Открыть файл</span>
-            </button>
-          )}
+            </a>
+          ) : rm.fileUrl ? (
+            <div className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest bg-muted text-muted-foreground">
+              <Loader2 size={14} className="animate-spin" />
+              <span>Загрузка ссылки...</span>
+            </div>
+          ) : null}
           <button
             onClick={() => setSelectedRoadmapId(rm.id)}
             className="flex items-center space-x-1 text-secondary text-xs font-bold hover:text-secondary/80 transition-colors"
