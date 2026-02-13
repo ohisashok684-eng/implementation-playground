@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, UserPlus, ShieldOff, Shield } from 'lucide-react';
+import { Search, UserPlus, ShieldOff, Shield, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import ModalOverlay from '@/components/ModalOverlay';
 
@@ -48,6 +48,22 @@ const AdminUsers = () => {
       setUsers(users.map(u => u.id === profile.id ? { ...u, is_blocked: !u.is_blocked } : u));
     } catch (err) {
       console.error('Failed to toggle block:', err);
+    }
+  };
+
+  const handleDeleteUser = async (profile: UserProfile) => {
+    if (!confirm(`Удалить пользователя ${profile.full_name || profile.email}? Это действие необратимо.`)) return;
+    try {
+      const res = await supabase.functions.invoke('delete-user', {
+        body: { user_id: profile.user_id },
+      });
+      if (res.error || res.data?.error) {
+        console.error('Delete failed:', res.data?.error || res.error?.message);
+        return;
+      }
+      setUsers(users.filter(u => u.id !== profile.id));
+    } catch (err) {
+      console.error('Failed to delete user:', err);
     }
   };
 
@@ -135,6 +151,13 @@ const AdminUsers = () => {
                 title={u.is_blocked ? 'Разблокировать' : 'Заблокировать'}
               >
                 {u.is_blocked ? <ShieldOff size={16} /> : <Shield size={16} />}
+              </button>
+              <button
+                onClick={() => handleDeleteUser(u)}
+                className="p-2 rounded-xl bg-muted text-muted-foreground hover:text-destructive transition-colors"
+                title="Удалить пользователя"
+              >
+                <Trash2 size={16} />
               </button>
             </div>
           ))
