@@ -291,6 +291,94 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ===== BATCH: execute multiple queries in one connection =====
+    if (action === "batch") {
+      const { queries } = body;
+      if (!Array.isArray(queries) || queries.length === 0) {
+        return new Response(JSON.stringify({ error: "queries must be a non-empty array" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const allowedTables = [
+        "goals", "sessions", "protocols", "roadmaps", "roadmap_steps",
+        "volcanoes", "progress_metrics", "route_info", "diary_entries",
+        "tracking_questions", "point_b_questions", "point_b_answers",
+        "point_b_results", "profiles", "user_roles",
+      ];
+
+      const pool = getPool();
+      const conn = await pool.connect();
+      try {
+        const results: any[] = [];
+        for (const q of queries) {
+          const { action: qAction, table, filters, order, single, withSteps } = q;
+          if (qAction !== "select") {
+            results.push({ error: "batch only supports select" });
+            continue;
+          }
+          if (!allowedTables.includes(table)) {
+            results.push({ error: `Table not allowed: ${table}` });
+            continue;
+          }
+
+          let query = `SELECT * FROM ${SCHEMA}.${table}`;
+          const params: any[] = [];
+          const conditions: string[] = [];
+          let paramIdx = 1;
+
+          if (filters) {
+            for (const [col, val] of Object.entries(filters)) {
+              conditions.push(`${col} = $${paramIdx}`);
+              params.push(val);
+              paramIdx++;
+            }
+          }
+          if (conditions.length > 0) {
+            query += ` WHERE ${conditions.join(" AND ")}`;
+          }
+          if (order) {
+            const dir = order.ascending === false ? "DESC" : "ASC";
+            query += ` ORDER BY ${order.column} ${dir}`;
+          }
+
+          const res = await conn.queryObject(query, params);
+          let data: any = single ? (res.rows[0] || null) : res.rows;
+
+          // roadmaps with steps join
+          if (table === "roadmaps" && withSteps && Array.isArray(data) && data.length > 0) {
+            const roadmapIds = data.map((r: any) => r.id);
+            const placeholders = roadmapIds.map((_: any, i: number) => `$${i + 1}`).join(",");
+            const stepsRes = await conn.queryObject(
+              `SELECT * FROM ${SCHEMA}.roadmap_steps WHERE roadmap_id IN (${placeholders}) ORDER BY sort_order`,
+              roadmapIds
+            );
+            const stepsMap: Record<string, any[]> = {};
+            for (const step of stepsRes.rows as any[]) {
+              if (!stepsMap[step.roadmap_id]) stepsMap[step.roadmap_id] = [];
+              stepsMap[step.roadmap_id].push(step);
+            }
+            data = data.map((r: any) => ({ ...r, roadmap_steps: stepsMap[r.id] || [] }));
+          }
+
+          results.push({ data });
+        }
+        conn.release();
+        return new Response(JSON.stringify({ results }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (error: unknown) {
+        conn.release();
+        const message = error instanceof Error ? error.message : "Unknown error";
+        console.error("Batch error:", message);
+        return new Response(JSON.stringify({ error: message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const pool = getPool();
     const conn = await pool.connect();
 
