@@ -8,16 +8,60 @@ const corsHeaders = {
 
 const SCHEMA = "mentoring";
 
+const ALLOWED_TABLES = [
+  "goals", "sessions", "protocols", "roadmaps", "roadmap_steps",
+  "volcanoes", "progress_metrics", "route_info", "diary_entries",
+  "tracking_questions", "point_b_questions", "point_b_answers",
+  "point_b_results", "profiles", "user_roles",
+];
+
+const ALLOWED_COLUMNS: Record<string, string[]> = {
+  goals: ["id", "user_id", "title", "amount", "has_amount", "progress", "created_at"],
+  sessions: ["id", "user_id", "session_number", "session_date", "session_time", "summary", "steps", "files", "gradient", "created_at"],
+  protocols: ["id", "user_id", "title", "description", "icon", "color", "file_name", "file_url", "created_at"],
+  roadmaps: ["id", "user_id", "title", "description", "status", "file_url", "created_at"],
+  roadmap_steps: ["id", "roadmap_id", "text", "done", "deadline", "sort_order"],
+  volcanoes: ["id", "user_id", "name", "value", "comment"],
+  progress_metrics: ["id", "user_id", "metric_key", "label", "current_value", "previous_value"],
+  route_info: ["id", "user_id", "sessions_total", "sessions_done", "time_weeks", "resources"],
+  diary_entries: ["id", "user_id", "entry_type", "entry_date", "energy", "text", "intent", "achievements", "lessons", "next_step", "created_at"],
+  tracking_questions: ["id", "user_id", "question_type", "question_text", "field_type", "sort_order"],
+  point_b_questions: ["id", "user_id", "question_text", "sort_order"],
+  point_b_answers: ["id", "user_id", "question_id", "answer_text"],
+  point_b_results: ["id", "user_id", "achieved", "analysis", "not_achieved"],
+  profiles: ["id", "user_id", "email", "full_name", "avatar_url", "is_blocked", "created_at", "updated_at"],
+  user_roles: ["id", "user_id", "role"],
+};
+
+function sanitizeIdentifier(name: string): string {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid identifier: ${name}`);
+  }
+  return name;
+}
+
+function validateColumn(table: string, col: string): string {
+  const allowed = ALLOWED_COLUMNS[table];
+  if (!allowed || !allowed.includes(col)) {
+    throw new Error(`Invalid column '${col}' for table '${table}'`);
+  }
+  return sanitizeIdentifier(col);
+}
+
+function validateTable(table: string): string {
+  if (!ALLOWED_TABLES.includes(table)) {
+    throw new Error(`Table not allowed: ${table}`);
+  }
+  return sanitizeIdentifier(table);
+}
+
 function getPool() {
-  // Strip leading "=" from env values (in case they were saved with KEY=VALUE format)
   const strip = (v: string | undefined) => v?.replace(/^=/, "") || "";
   const host = strip(Deno.env.get("POSTGRESQL_HOST"));
   const port = strip(Deno.env.get("POSTGRESQL_PORT"));
   const user = strip(Deno.env.get("POSTGRESQL_USER"));
   const password = strip(Deno.env.get("POSTGRESQL_PASSWORD"));
   const database = strip(Deno.env.get("POSTGRESQL_DBNAME"));
-
-  console.log("DB connection config:", { host, port, user, database, hasPwd: !!password });
 
   if (!host || !user || !password || !database) {
     throw new Error("External DB credentials not configured");
@@ -30,7 +74,7 @@ function getPool() {
       user,
       password,
       database,
-      tls: { enabled: false },
+      tls: { enabled: true },
     },
     1,
     true
@@ -301,24 +345,17 @@ Deno.serve(async (req) => {
         // ===== SELECT =====
         case "select": {
           const { table, filters, order, single } = body;
-          const allowedTables = [
-            "goals", "sessions", "protocols", "roadmaps", "roadmap_steps",
-            "volcanoes", "progress_metrics", "route_info", "diary_entries",
-            "tracking_questions", "point_b_questions", "point_b_answers",
-            "point_b_results", "profiles", "user_roles",
-          ];
-          if (!allowedTables.includes(table)) {
-            throw new Error(`Table not allowed: ${table}`);
-          }
+          const validTable = validateTable(table);
 
-          let query = `SELECT * FROM ${SCHEMA}.${table}`;
+          let query = `SELECT * FROM ${SCHEMA}.${validTable}`;
           const params: any[] = [];
           const conditions: string[] = [];
           let paramIdx = 1;
 
           if (filters) {
             for (const [col, val] of Object.entries(filters)) {
-              conditions.push(`${col} = $${paramIdx}`);
+              const validCol = validateColumn(table, col);
+              conditions.push(`${validCol} = $${paramIdx}`);
               params.push(val);
               paramIdx++;
             }
@@ -329,8 +366,9 @@ Deno.serve(async (req) => {
           }
 
           if (order) {
+            const validOrderCol = validateColumn(table, order.column);
             const dir = order.ascending === false ? "DESC" : "ASC";
-            query += ` ORDER BY ${order.column} ${dir}`;
+            query += ` ORDER BY ${validOrderCol} ${dir}`;
           }
 
           const res = await conn.queryObject(query, params);
@@ -367,13 +405,14 @@ Deno.serve(async (req) => {
         // ===== INSERT =====
         case "insert": {
           const { table, data: insertData } = body;
+          const validTable = validateTable(table);
           const row = { ...insertData, user_id: userId };
-          const cols = Object.keys(row);
+          const cols = Object.keys(row).map(c => validateColumn(table, c));
           const vals = Object.values(row);
           const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
 
           const res = await conn.queryObject(
-            `INSERT INTO ${SCHEMA}.${table} (${cols.join(", ")}) VALUES (${placeholders}) RETURNING *`,
+            `INSERT INTO ${SCHEMA}.${validTable} (${cols.join(", ")}) VALUES (${placeholders}) RETURNING *`,
             vals
           );
           result = { data: res.rows[0] };
@@ -383,19 +422,22 @@ Deno.serve(async (req) => {
         // ===== UPDATE =====
         case "update": {
           const { table, data: updateData, match } = body;
+          const validTable = validateTable(table);
           const setClauses: string[] = [];
           const params: any[] = [];
           let idx = 1;
 
           for (const [col, val] of Object.entries(updateData)) {
-            setClauses.push(`${col} = $${idx}`);
+            const validCol = validateColumn(table, col);
+            setClauses.push(`${validCol} = $${idx}`);
             params.push(val);
             idx++;
           }
 
           const conditions: string[] = [];
           for (const [col, val] of Object.entries(match || {})) {
-            conditions.push(`${col} = $${idx}`);
+            const validCol = validateColumn(table, col);
+            conditions.push(`${validCol} = $${idx}`);
             params.push(val);
             idx++;
           }
@@ -405,7 +447,7 @@ Deno.serve(async (req) => {
           params.push(userId);
 
           const res = await conn.queryObject(
-            `UPDATE ${SCHEMA}.${table} SET ${setClauses.join(", ")} WHERE ${conditions.join(" AND ")} RETURNING *`,
+            `UPDATE ${SCHEMA}.${validTable} SET ${setClauses.join(", ")} WHERE ${conditions.join(" AND ")} RETURNING *`,
             params
           );
           result = { data: res.rows[0] };
@@ -415,19 +457,21 @@ Deno.serve(async (req) => {
         // ===== UPSERT =====
         case "upsert": {
           const { table, data: upsertData, onConflict } = body;
+          const validTable = validateTable(table);
           const row = { ...upsertData, user_id: userId };
-          const cols = Object.keys(row);
+          const cols = Object.keys(row).map(c => validateColumn(table, c));
           const vals = Object.values(row);
           const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
 
+          const conflictCols = onConflict.split(",").map((s: string) => validateColumn(table, s.trim()));
           const updateCols = cols
-            .filter((c) => !onConflict.split(",").map((s: string) => s.trim()).includes(c))
+            .filter((c) => !conflictCols.includes(c))
             .map((c) => `${c} = EXCLUDED.${c}`)
             .join(", ");
 
           const res = await conn.queryObject(
-            `INSERT INTO ${SCHEMA}.${table} (${cols.join(", ")}) VALUES (${placeholders})
-             ON CONFLICT (${onConflict}) DO UPDATE SET ${updateCols} RETURNING *`,
+            `INSERT INTO ${SCHEMA}.${validTable} (${cols.join(", ")}) VALUES (${placeholders})
+             ON CONFLICT (${conflictCols.join(", ")}) DO UPDATE SET ${updateCols} RETURNING *`,
             vals
           );
           result = { data: res.rows[0] };
@@ -437,12 +481,14 @@ Deno.serve(async (req) => {
         // ===== DELETE =====
         case "delete": {
           const { table, match } = body;
+          const validTable = validateTable(table);
           const conditions: string[] = [];
           const params: any[] = [];
           let idx = 1;
 
           for (const [col, val] of Object.entries(match || {})) {
-            conditions.push(`${col} = $${idx}`);
+            const validCol = validateColumn(table, col);
+            conditions.push(`${validCol} = $${idx}`);
             params.push(val);
             idx++;
           }
@@ -451,7 +497,7 @@ Deno.serve(async (req) => {
           params.push(userId);
 
           await conn.queryObject(
-            `DELETE FROM ${SCHEMA}.${table} WHERE ${conditions.join(" AND ")}`,
+            `DELETE FROM ${SCHEMA}.${validTable} WHERE ${conditions.join(" AND ")}`,
             params
           );
           result = { success: true };
@@ -465,14 +511,16 @@ Deno.serve(async (req) => {
           }
 
           const { table, filters, order } = body;
-          let query = `SELECT * FROM ${SCHEMA}.${table}`;
+          const validTable = validateTable(table);
+          let query = `SELECT * FROM ${SCHEMA}.${validTable}`;
           const params: any[] = [];
           const conditions: string[] = [];
           let paramIdx = 1;
 
           if (filters) {
             for (const [col, val] of Object.entries(filters)) {
-              conditions.push(`${col} = $${paramIdx}`);
+              const validCol = validateColumn(table, col);
+              conditions.push(`${validCol} = $${paramIdx}`);
               params.push(val);
               paramIdx++;
             }
@@ -483,8 +531,9 @@ Deno.serve(async (req) => {
           }
 
           if (order) {
+            const validOrderCol = validateColumn(table, order.column);
             const dir = order.ascending === false ? "DESC" : "ASC";
-            query += ` ORDER BY ${order.column} ${dir}`;
+            query += ` ORDER BY ${validOrderCol} ${dir}`;
           }
 
           const res = await conn.queryObject(query, params);
@@ -519,25 +568,28 @@ Deno.serve(async (req) => {
           }
 
           const { table, data: updateData, match } = body;
+          const validTable = validateTable(table);
           const setClauses: string[] = [];
           const params: any[] = [];
           let idx = 1;
 
           for (const [col, val] of Object.entries(updateData)) {
-            setClauses.push(`${col} = $${idx}`);
+            const validCol = validateColumn(table, col);
+            setClauses.push(`${validCol} = $${idx}`);
             params.push(val);
             idx++;
           }
 
           const conditions: string[] = [];
           for (const [col, val] of Object.entries(match || {})) {
-            conditions.push(`${col} = $${idx}`);
+            const validCol = validateColumn(table, col);
+            conditions.push(`${validCol} = $${idx}`);
             params.push(val);
             idx++;
           }
 
           const res = await conn.queryObject(
-            `UPDATE ${SCHEMA}.${table} SET ${setClauses.join(", ")} WHERE ${conditions.join(" AND ")} RETURNING *`,
+            `UPDATE ${SCHEMA}.${validTable} SET ${setClauses.join(", ")} WHERE ${conditions.join(" AND ")} RETURNING *`,
             params
           );
           result = { data: res.rows[0] };
@@ -551,12 +603,13 @@ Deno.serve(async (req) => {
           }
 
           const { table, data: insertData } = body;
-          const cols = Object.keys(insertData);
+          const validTable = validateTable(table);
+          const cols = Object.keys(insertData).map(c => validateColumn(table, c));
           const vals = Object.values(insertData);
           const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
 
           const res = await conn.queryObject(
-            `INSERT INTO ${SCHEMA}.${table} (${cols.join(", ")}) VALUES (${placeholders}) RETURNING *`,
+            `INSERT INTO ${SCHEMA}.${validTable} (${cols.join(", ")}) VALUES (${placeholders}) RETURNING *`,
             vals
           );
           result = { data: res.rows[0] };
@@ -570,18 +623,20 @@ Deno.serve(async (req) => {
           }
 
           const { table, match } = body;
+          const validTable = validateTable(table);
           const conditions: string[] = [];
           const params: any[] = [];
           let idx = 1;
 
           for (const [col, val] of Object.entries(match || {})) {
-            conditions.push(`${col} = $${idx}`);
+            const validCol = validateColumn(table, col);
+            conditions.push(`${validCol} = $${idx}`);
             params.push(val);
             idx++;
           }
 
           await conn.queryObject(
-            `DELETE FROM ${SCHEMA}.${table} WHERE ${conditions.join(" AND ")}`,
+            `DELETE FROM ${SCHEMA}.${validTable} WHERE ${conditions.join(" AND ")}`,
             params
           );
           result = { success: true };
@@ -595,18 +650,20 @@ Deno.serve(async (req) => {
           }
 
           const { table, data: upsertData, onConflict } = body;
-          const cols = Object.keys(upsertData);
+          const validTable = validateTable(table);
+          const cols = Object.keys(upsertData).map(c => validateColumn(table, c));
           const vals = Object.values(upsertData);
           const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
 
+          const conflictCols = onConflict.split(",").map((s: string) => validateColumn(table, s.trim()));
           const updateCols = cols
-            .filter((c) => !onConflict.split(",").map((s: string) => s.trim()).includes(c))
+            .filter((c) => !conflictCols.includes(c))
             .map((c) => `${c} = EXCLUDED.${c}`)
             .join(", ");
 
           const res = await conn.queryObject(
-            `INSERT INTO ${SCHEMA}.${table} (${cols.join(", ")}) VALUES (${placeholders})
-             ON CONFLICT (${onConflict}) DO UPDATE SET ${updateCols} RETURNING *`,
+            `INSERT INTO ${SCHEMA}.${validTable} (${cols.join(", ")}) VALUES (${placeholders})
+             ON CONFLICT (${conflictCols.join(", ")}) DO UPDATE SET ${updateCols} RETURNING *`,
             vals
           );
           result = { data: res.rows[0] };
@@ -626,7 +683,11 @@ Deno.serve(async (req) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("External DB error:", message);
-    return new Response(JSON.stringify({ error: message }), {
+    // Don't leak internal error details to client
+    const safeMessage = message.includes("not allowed") || message.includes("Invalid") || message.includes("Unauthorized") || message.includes("Forbidden") || message.includes("Unknown action")
+      ? message
+      : "Internal server error";
+    return new Response(JSON.stringify({ error: safeMessage }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
