@@ -3,8 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Upload, Check, Edit2, MessageSquare, Rocket } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
+import { uploadFile } from '@/lib/uploadFile';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import ModalOverlay from '@/components/ModalOverlay';
 
 const AdminClientView = () => {
   const { userId } = useParams<{ userId: string }>();
@@ -136,12 +138,8 @@ const AdminClientView = () => {
     // Upload new files
     const filePaths: string[] = [];
     for (const file of sessionForm.files) {
-      const ext = file.name.split('.').pop();
-      const path = `${userId}/sessions/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, file);
-      if (!upErr) {
-        filePaths.push(path);
-      }
+      const path = await uploadFile(`${userId}/sessions`, file);
+      if (path) filePaths.push(path);
     }
 
     try {
@@ -204,11 +202,9 @@ const AdminClientView = () => {
     let fileName = '';
 
     if (protocolForm.file) {
-      const ext = protocolForm.file.name.split('.').pop();
-      const path = `${userId}/protocols/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, protocolForm.file);
-      if (upErr) {
-        toast({ title: 'Ошибка загрузки файла', description: upErr.message, variant: 'destructive' });
+      const path = await uploadFile(`${userId}/protocols`, protocolForm.file);
+      if (!path) {
+        toast({ title: 'Ошибка загрузки файла', variant: 'destructive' });
         return;
       }
       fileUrl = path;
@@ -273,11 +269,9 @@ const AdminClientView = () => {
     // Upload file if provided
     let fileUrl: string | null = null;
     if (roadmapForm.file) {
-      const ext = roadmapForm.file.name.split('.').pop();
-      const path = `${userId}/roadmaps/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, roadmapForm.file);
-      if (upErr) {
-        toast({ title: 'Ошибка загрузки файла', description: upErr.message, variant: 'destructive' });
+      const path = await uploadFile(`${userId}/roadmaps`, roadmapForm.file);
+      if (!path) {
+        toast({ title: 'Ошибка загрузки файла', variant: 'destructive' });
         return;
       }
       fileUrl = path;
@@ -357,11 +351,9 @@ const AdminClientView = () => {
   };
 
   const handleUploadRoadmapFile = async (roadmapId: string, file: File) => {
-    const ext = file.name.split('.').pop();
-    const path = `${userId}/roadmaps/${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, file);
-    if (upErr) {
-      toast({ title: 'Ошибка загрузки', description: upErr.message, variant: 'destructive' });
+    const path = await uploadFile(`${userId}/roadmaps`, file);
+    if (!path) {
+      toast({ title: 'Ошибка загрузки', variant: 'destructive' });
       return;
     }
     try {
@@ -617,75 +609,71 @@ const AdminClientView = () => {
       </Section>
 
       {/* Session Form Modal (create + edit) */}
-      {showSessionForm && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-foreground">{editingSessionId ? 'Редактировать сессию' : 'Новая сессия'}</h3>
-              <button onClick={() => { setShowSessionForm(false); setEditingSessionId(null); }} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <p className="label-tiny">Номер</p>
-                <input type="number" value={sessionForm.session_number} onChange={e => setSessionForm({...sessionForm, session_number: +e.target.value})} className="input-glass text-center" />
-              </div>
-              <div className="space-y-1">
-                <p className="label-tiny">Дата</p>
-                <input type="date" value={sessionForm.session_date} onChange={e => setSessionForm({...sessionForm, session_date: e.target.value})} className="input-glass text-xs" />
-              </div>
-              <div className="space-y-1">
-                <p className="label-tiny">Время</p>
-                <input type="time" value={sessionForm.session_time} onChange={e => setSessionForm({...sessionForm, session_time: e.target.value})} className="input-glass text-xs" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Саммари</p>
-              <textarea value={sessionForm.summary} onChange={e => setSessionForm({...sessionForm, summary: e.target.value})} rows={3} className="input-glass resize-none" placeholder="Ключевые выводы сессии..." />
-            </div>
-            <div className="space-y-2">
-              <p className="label-tiny">Шаги после сессии</p>
-              {sessionForm.steps.map((step, i) => (
-                <div key={i} className="flex space-x-2">
-                  <input value={step} onChange={e => { const s = [...sessionForm.steps]; s[i] = e.target.value; setSessionForm({...sessionForm, steps: s}); }} className="input-glass flex-1" placeholder={`Шаг ${i+1}`} />
-                  {sessionForm.steps.length > 1 && (
-                    <button onClick={() => setSessionForm({...sessionForm, steps: sessionForm.steps.filter((_, j) => j !== i)})} className="text-destructive p-2"><Trash2 size={14} /></button>
-                  )}
-                </div>
-              ))}
-              <button onClick={() => setSessionForm({...sessionForm, steps: [...sessionForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
-            </div>
-            <div className="space-y-2">
-              <p className="label-tiny">Файлы</p>
-              {editingSessionId && (() => {
-                const existingSession = sessions.find(s => s.id === editingSessionId);
-                const existingFiles = existingSession?.files || [];
-                if (existingFiles.length === 0) return null;
-                return (
-                  <div className="space-y-1">
-                    {existingFiles.map((filePath: string, i: number) => (
-                      <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-xl">
-                        <span className="text-[10px] text-foreground font-medium truncate">📎 Файл {i + 1} (загружен)</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-              {sessionForm.files.map((f, i) => (
-                <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-xl">
-                  <span className="text-[10px] text-foreground font-medium truncate">📎 {f.name}</span>
-                  <button onClick={() => setSessionForm({...sessionForm, files: sessionForm.files.filter((_, j) => j !== i)})} className="text-destructive p-1"><Trash2 size={12} /></button>
-                </div>
-              ))}
-              <label className="cursor-pointer inline-flex items-center space-x-1 text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80 transition-colors">
-                <Upload size={12} />
-                <span>Добавить файл</span>
-                <input type="file" className="hidden" onChange={e => { if (e.target.files?.[0]) setSessionForm({...sessionForm, files: [...sessionForm.files, e.target.files[0]]}); e.target.value = ''; }} />
-              </label>
-            </div>
-            <button onClick={handleSaveSession} className="w-full py-4 btn-dark">{editingSessionId ? 'Сохранить изменения' : 'Сохранить сессию'}</button>
+      <ModalOverlay
+        isOpen={showSessionForm}
+        onClose={() => { setShowSessionForm(false); setEditingSessionId(null); }}
+        title={editingSessionId ? 'Редактировать сессию' : 'Новая сессия'}
+      >
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <p className="label-tiny">Номер</p>
+            <input type="number" value={sessionForm.session_number} onChange={e => setSessionForm({...sessionForm, session_number: +e.target.value})} className="input-glass text-center" />
+          </div>
+          <div className="space-y-1">
+            <p className="label-tiny">Дата</p>
+            <input type="date" value={sessionForm.session_date} onChange={e => setSessionForm({...sessionForm, session_date: e.target.value})} className="input-glass text-xs" />
+          </div>
+          <div className="space-y-1">
+            <p className="label-tiny">Время</p>
+            <input type="time" value={sessionForm.session_time} onChange={e => setSessionForm({...sessionForm, session_time: e.target.value})} className="input-glass text-xs" />
           </div>
         </div>
-      )}
+        <div className="space-y-1">
+          <p className="label-tiny">Саммари</p>
+          <textarea value={sessionForm.summary} onChange={e => setSessionForm({...sessionForm, summary: e.target.value})} rows={3} className="input-glass resize-none" placeholder="Ключевые выводы сессии..." />
+        </div>
+        <div className="space-y-2">
+          <p className="label-tiny">Шаги после сессии</p>
+          {sessionForm.steps.map((step, i) => (
+            <div key={i} className="flex space-x-2">
+              <input value={step} onChange={e => { const s = [...sessionForm.steps]; s[i] = e.target.value; setSessionForm({...sessionForm, steps: s}); }} className="input-glass flex-1" placeholder={`Шаг ${i+1}`} />
+              {sessionForm.steps.length > 1 && (
+                <button onClick={() => setSessionForm({...sessionForm, steps: sessionForm.steps.filter((_, j) => j !== i)})} className="text-destructive p-2"><Trash2 size={14} /></button>
+              )}
+            </div>
+          ))}
+          <button onClick={() => setSessionForm({...sessionForm, steps: [...sessionForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
+        </div>
+        <div className="space-y-2">
+          <p className="label-tiny">Файлы</p>
+          {editingSessionId && (() => {
+            const existingSession = sessions.find(s => s.id === editingSessionId);
+            const existingFiles = existingSession?.files || [];
+            if (existingFiles.length === 0) return null;
+            return (
+              <div className="space-y-1">
+                {existingFiles.map((filePath: string, i: number) => (
+                  <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-xl">
+                    <span className="text-[10px] text-foreground font-medium truncate">📎 Файл {i + 1} (загружен)</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          {sessionForm.files.map((f, i) => (
+            <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-xl">
+              <span className="text-[10px] text-foreground font-medium truncate">📎 {f.name}</span>
+              <button onClick={() => setSessionForm({...sessionForm, files: sessionForm.files.filter((_, j) => j !== i)})} className="text-destructive p-1"><Trash2 size={12} /></button>
+            </div>
+          ))}
+          <label className="cursor-pointer inline-flex items-center space-x-1 text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80 transition-colors">
+            <Upload size={12} />
+            <span>Добавить файл</span>
+            <input type="file" className="hidden" onChange={e => { if (e.target.files?.[0]) setSessionForm({...sessionForm, files: [...sessionForm.files, e.target.files[0]]}); e.target.value = ''; }} />
+          </label>
+        </div>
+        <button onClick={handleSaveSession} className="w-full py-4 btn-dark">{editingSessionId ? 'Сохранить изменения' : 'Сохранить сессию'}</button>
+      </ModalOverlay>
 
       {/* ========== PROTOCOLS ========== */}
       <Section title="Протоколы" icon={Zap} action={<AddButton onClick={openCreateProtocol} label="Добавить" />}>
@@ -711,46 +699,42 @@ const AdminClientView = () => {
       </Section>
 
       {/* Protocol Form Modal (create + edit) */}
-      {showProtocolForm && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-foreground">{editingProtocolId ? 'Редактировать протокол' : 'Новый протокол'}</h3>
-              <button onClick={() => { setShowProtocolForm(false); setEditingProtocolId(null); }} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Название</p>
-              <input value={protocolForm.title} onChange={e => setProtocolForm({...protocolForm, title: e.target.value})} className="input-glass" placeholder="Протокол восстановления..." />
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Описание</p>
-              <textarea value={protocolForm.description} onChange={e => setProtocolForm({...protocolForm, description: e.target.value})} rows={2} className="input-glass resize-none" placeholder="Краткое описание..." />
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Цвет</p>
-              <div className="flex space-x-2">
-                {['amber', 'emerald', 'purple', 'rose', 'blue'].map(c => (
-                  <button key={c} onClick={() => setProtocolForm({...protocolForm, color: c})}
-                    className={`w-8 h-8 rounded-full transition-all ${protocolForm.color === c ? 'ring-2 ring-offset-2 ring-primary scale-110' : ''}`}
-                    style={{ backgroundColor: c === 'amber' ? '#f59e0b' : c === 'emerald' ? '#10b981' : c === 'purple' ? '#8b5cf6' : c === 'rose' ? '#f43f5e' : '#3b82f6' }}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Файл</p>
-              <input type="file" ref={fileInputRef} onChange={e => setProtocolForm({...protocolForm, file: e.target.files?.[0] || null})} className="text-xs" />
-              {protocolForm.file && <p className="text-[10px] text-secondary font-medium">📎 {protocolForm.file.name}</p>}
-              {editingProtocolId && !protocolForm.file && (() => {
-                const existing = protocols.find(p => p.id === editingProtocolId);
-                if (existing?.file_name) return <p className="text-[10px] text-muted-foreground">Текущий файл: 📎 {existing.file_name}</p>;
-                return null;
-              })()}
-            </div>
-            <button onClick={handleSaveProtocol} className="w-full py-4 btn-dark">{editingProtocolId ? 'Сохранить изменения' : 'Сохранить протокол'}</button>
+      <ModalOverlay
+        isOpen={showProtocolForm}
+        onClose={() => { setShowProtocolForm(false); setEditingProtocolId(null); }}
+        title={editingProtocolId ? 'Редактировать протокол' : 'Новый протокол'}
+      >
+        <div className="space-y-1">
+          <p className="label-tiny">Название</p>
+          <input value={protocolForm.title} onChange={e => setProtocolForm({...protocolForm, title: e.target.value})} className="input-glass" placeholder="Протокол восстановления..." />
+        </div>
+        <div className="space-y-1">
+          <p className="label-tiny">Описание</p>
+          <textarea value={protocolForm.description} onChange={e => setProtocolForm({...protocolForm, description: e.target.value})} rows={2} className="input-glass resize-none" placeholder="Краткое описание..." />
+        </div>
+        <div className="space-y-1">
+          <p className="label-tiny">Цвет</p>
+          <div className="flex space-x-2">
+            {['amber', 'emerald', 'purple', 'rose', 'blue'].map(c => (
+              <button key={c} onClick={() => setProtocolForm({...protocolForm, color: c})}
+                className={`w-8 h-8 rounded-full transition-all ${protocolForm.color === c ? 'ring-2 ring-offset-2 ring-primary scale-110' : ''}`}
+                style={{ backgroundColor: c === 'amber' ? '#f59e0b' : c === 'emerald' ? '#10b981' : c === 'purple' ? '#8b5cf6' : c === 'rose' ? '#f43f5e' : '#3b82f6' }}
+              />
+            ))}
           </div>
         </div>
-      )}
+        <div className="space-y-1">
+          <p className="label-tiny">Файл</p>
+          <input type="file" ref={fileInputRef} onChange={e => setProtocolForm({...protocolForm, file: e.target.files?.[0] || null})} className="text-xs" />
+          {protocolForm.file && <p className="text-[10px] text-secondary font-medium">📎 {protocolForm.file.name}</p>}
+          {editingProtocolId && !protocolForm.file && (() => {
+            const existing = protocols.find(p => p.id === editingProtocolId);
+            if (existing?.file_name) return <p className="text-[10px] text-muted-foreground">Текущий файл: 📎 {existing.file_name}</p>;
+            return null;
+          })()}
+        </div>
+        <button onClick={handleSaveProtocol} className="w-full py-4 btn-dark">{editingProtocolId ? 'Сохранить изменения' : 'Сохранить протокол'}</button>
+      </ModalOverlay>
 
       {/* ========== ROADMAPS ========== */}
       <Section title="Дорожные карты" icon={Map} action={<AddButton onClick={openCreateRoadmap} label="Добавить" />}>
@@ -815,58 +799,53 @@ const AdminClientView = () => {
       </Section>
 
       {/* Roadmap Form Modal (create + edit) */}
-      {showRoadmapForm && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-foreground">{editingRoadmapId ? 'Редактировать карту' : 'Новая дорожная карта'}</h3>
-              <button onClick={() => { setShowRoadmapForm(false); setEditingRoadmapId(null); }} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Название</p>
-              <input value={roadmapForm.title} onChange={e => setRoadmapForm({...roadmapForm, title: e.target.value})} className="input-glass" placeholder="Предварительная / Утвержденная / Итоговая" />
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Описание</p>
-              <textarea value={roadmapForm.description} onChange={e => setRoadmapForm({...roadmapForm, description: e.target.value})} rows={2} className="input-glass resize-none" />
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Статус</p>
-              <select value={roadmapForm.status} onChange={e => setRoadmapForm({...roadmapForm, status: e.target.value})} className="input-glass">
-                <option>В работе</option>
-                <option>Утверждена</option>
-                <option>Завершена</option>
-              </select>
-            </div>
-            {/* File upload in creation form */}
-            <div className="space-y-1">
-              <p className="label-tiny">Файл дорожной карты</p>
-              <input type="file" onChange={e => setRoadmapForm({...roadmapForm, file: e.target.files?.[0] || null})} className="text-xs" />
-              {roadmapForm.file && <p className="text-[10px] text-secondary font-medium">📎 {roadmapForm.file.name}</p>}
-              {editingRoadmapId && !roadmapForm.file && (() => {
-                const existing = roadmaps.find(r => r.id === editingRoadmapId);
-                if (existing?.file_url) return <p className="text-[10px] text-muted-foreground">Текущий файл загружен ✓</p>;
-                return null;
-              })()}
-            </div>
-            {!editingRoadmapId && (
-              <div className="space-y-2">
-                <p className="label-tiny">Шаги</p>
-                {roadmapForm.steps.map((step, i) => (
-                  <div key={i} className="flex space-x-2">
-                    <input value={step} onChange={e => { const s = [...roadmapForm.steps]; s[i] = e.target.value; setRoadmapForm({...roadmapForm, steps: s}); }} className="input-glass flex-1" placeholder={`Шаг ${i+1}`} />
-                    {roadmapForm.steps.length > 1 && (
-                      <button onClick={() => setRoadmapForm({...roadmapForm, steps: roadmapForm.steps.filter((_, j) => j !== i)})} className="text-destructive p-2"><Trash2 size={14} /></button>
-                    )}
-                  </div>
-                ))}
-                <button onClick={() => setRoadmapForm({...roadmapForm, steps: [...roadmapForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
-              </div>
-            )}
-            <button onClick={handleSaveRoadmap} className="w-full py-4 btn-dark">{editingRoadmapId ? 'Сохранить изменения' : 'Создать карту'}</button>
-          </div>
+      <ModalOverlay
+        isOpen={showRoadmapForm}
+        onClose={() => { setShowRoadmapForm(false); setEditingRoadmapId(null); }}
+        title={editingRoadmapId ? 'Редактировать карту' : 'Новая дорожная карта'}
+      >
+        <div className="space-y-1">
+          <p className="label-tiny">Название</p>
+          <input value={roadmapForm.title} onChange={e => setRoadmapForm({...roadmapForm, title: e.target.value})} className="input-glass" placeholder="Предварительная / Утвержденная / Итоговая" />
         </div>
-      )}
+        <div className="space-y-1">
+          <p className="label-tiny">Описание</p>
+          <textarea value={roadmapForm.description} onChange={e => setRoadmapForm({...roadmapForm, description: e.target.value})} rows={2} className="input-glass resize-none" />
+        </div>
+        <div className="space-y-1">
+          <p className="label-tiny">Статус</p>
+          <select value={roadmapForm.status} onChange={e => setRoadmapForm({...roadmapForm, status: e.target.value})} className="input-glass">
+            <option>В работе</option>
+            <option>Утверждена</option>
+            <option>Завершена</option>
+          </select>
+        </div>
+        <div className="space-y-1">
+          <p className="label-tiny">Файл дорожной карты</p>
+          <input type="file" onChange={e => setRoadmapForm({...roadmapForm, file: e.target.files?.[0] || null})} className="text-xs" />
+          {roadmapForm.file && <p className="text-[10px] text-secondary font-medium">📎 {roadmapForm.file.name}</p>}
+          {editingRoadmapId && !roadmapForm.file && (() => {
+            const existing = roadmaps.find(r => r.id === editingRoadmapId);
+            if (existing?.file_url) return <p className="text-[10px] text-muted-foreground">Текущий файл загружен ✓</p>;
+            return null;
+          })()}
+        </div>
+        {!editingRoadmapId && (
+          <div className="space-y-2">
+            <p className="label-tiny">Шаги</p>
+            {roadmapForm.steps.map((step, i) => (
+              <div key={i} className="flex space-x-2">
+                <input value={step} onChange={e => { const s = [...roadmapForm.steps]; s[i] = e.target.value; setRoadmapForm({...roadmapForm, steps: s}); }} className="input-glass flex-1" placeholder={`Шаг ${i+1}`} />
+                {roadmapForm.steps.length > 1 && (
+                  <button onClick={() => setRoadmapForm({...roadmapForm, steps: roadmapForm.steps.filter((_, j) => j !== i)})} className="text-destructive p-2"><Trash2 size={14} /></button>
+                )}
+              </div>
+            ))}
+            <button onClick={() => setRoadmapForm({...roadmapForm, steps: [...roadmapForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
+          </div>
+        )}
+        <button onClick={handleSaveRoadmap} className="w-full py-4 btn-dark">{editingRoadmapId ? 'Сохранить изменения' : 'Создать карту'}</button>
+      </ModalOverlay>
 
       {/* ========== TRACKING QUESTIONS ========== */}
       <Section title="Вопросы трекинга" icon={MessageSquare} action={<AddButton onClick={() => setShowQuestionForm(true)} label="Добавить" />}>
@@ -931,35 +910,31 @@ const AdminClientView = () => {
       </Section>
 
       {/* Question Form Modal */}
-      {showQuestionForm && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-foreground">Новый вопрос</h3>
-              <button onClick={() => setShowQuestionForm(false)} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Тип</p>
-              <select value={questionForm.question_type} onChange={e => setQuestionForm({...questionForm, question_type: e.target.value as any})} className="input-glass">
-                <option value="daily">Ежедневный</option>
-                <option value="weekly">Еженедельный</option>
-              </select>
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Текст вопроса</p>
-              <input value={questionForm.question_text} onChange={e => setQuestionForm({...questionForm, question_text: e.target.value})} className="input-glass" placeholder="Как вы себя чувствуете?" />
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Тип ответа</p>
-              <select value={questionForm.field_type} onChange={e => setQuestionForm({...questionForm, field_type: e.target.value})} className="input-glass">
-                <option value="text">Текстовый</option>
-                <option value="scale">Шкала 1-10</option>
-              </select>
-            </div>
-            <button onClick={handleSaveQuestion} className="w-full py-4 btn-dark">Добавить вопрос</button>
-          </div>
+      <ModalOverlay
+        isOpen={showQuestionForm}
+        onClose={() => setShowQuestionForm(false)}
+        title="Новый вопрос"
+      >
+        <div className="space-y-1">
+          <p className="label-tiny">Тип</p>
+          <select value={questionForm.question_type} onChange={e => setQuestionForm({...questionForm, question_type: e.target.value as any})} className="input-glass">
+            <option value="daily">Ежедневный</option>
+            <option value="weekly">Еженедельный</option>
+          </select>
         </div>
-      )}
+        <div className="space-y-1">
+          <p className="label-tiny">Текст вопроса</p>
+          <input value={questionForm.question_text} onChange={e => setQuestionForm({...questionForm, question_text: e.target.value})} className="input-glass" placeholder="Как вы себя чувствуете?" />
+        </div>
+        <div className="space-y-1">
+          <p className="label-tiny">Тип ответа</p>
+          <select value={questionForm.field_type} onChange={e => setQuestionForm({...questionForm, field_type: e.target.value})} className="input-glass">
+            <option value="text">Текстовый</option>
+            <option value="scale">Шкала 1-10</option>
+          </select>
+        </div>
+        <button onClick={handleSaveQuestion} className="w-full py-4 btn-dark">Добавить вопрос</button>
+      </ModalOverlay>
 
       {/* ========== POINT B QUESTIONS ========== */}
       <Section title="Вопросы «Точка Б»" icon={Rocket} action={<AddButton onClick={() => setShowPointBForm(true)} label="Добавить" />}>
@@ -989,21 +964,17 @@ const AdminClientView = () => {
       </Section>
 
       {/* Point B Question Form Modal */}
-      {showPointBForm && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-foreground">Новый вопрос «Точка Б»</h3>
-              <button onClick={() => setShowPointBForm(false)} className="text-muted-foreground hover:text-foreground p-1"><X size={20} /></button>
-            </div>
-            <div className="space-y-1">
-              <p className="label-tiny">Текст вопроса</p>
-              <input value={pointBFormText} onChange={e => setPointBFormText(e.target.value)} className="input-glass" placeholder="Что удалось достичь?" />
-            </div>
-            <button onClick={handleSavePointBQuestion} className="w-full py-4 btn-dark">Добавить вопрос</button>
-          </div>
+      <ModalOverlay
+        isOpen={showPointBForm}
+        onClose={() => setShowPointBForm(false)}
+        title="Новый вопрос «Точка Б»"
+      >
+        <div className="space-y-1">
+          <p className="label-tiny">Текст вопроса</p>
+          <input value={pointBFormText} onChange={e => setPointBFormText(e.target.value)} className="input-glass" placeholder="Что удалось достичь?" />
         </div>
-      )}
+        <button onClick={handleSavePointBQuestion} className="w-full py-4 btn-dark">Добавить вопрос</button>
+      </ModalOverlay>
 
       {/* Removed: Volcanoes, Metrics, Diary — private to user */}
     </div>

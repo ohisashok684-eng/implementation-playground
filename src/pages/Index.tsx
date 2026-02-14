@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { User, Plus, Trash2, X, Flag, Rocket, Check, LogOut } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { externalDb } from '@/lib/externalDb';
+import { formatAmount } from '@/lib/format';
 import BottomNav from '@/components/BottomNav';
 import NotificationToast from '@/components/NotificationToast';
 import ModalOverlay from '@/components/ModalOverlay';
+import ScaleInput from '@/components/ScaleInput';
 import VolcanoIcon from '@/components/VolcanoIcon';
 import DashboardTab from '@/tabs/DashboardTab';
 import TrackingTab from '@/tabs/TrackingTab';
@@ -388,10 +390,7 @@ const Index = () => {
     setDiaryEntries([newEntry, ...diaryEntries]);
   };
 
-  const formatAmount = (val: string) => {
-    if (!val) return '0';
-    return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  };
+  // formatAmount imported from lib
 
   return (
     <div className="min-h-screen bg-background">
@@ -575,172 +574,129 @@ const Index = () => {
       </ModalOverlay>
 
       {/* Metric Picker */}
-      {editingMetric && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-end justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md p-6 space-y-5">
-            <h3 className="text-lg font-black text-foreground text-center">Выберите значение от 1 до 10</h3>
-            <div className="grid grid-cols-5 gap-2">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                <button
-                  key={num}
-                  onClick={() => updateMetricValue(num)}
-                  className={`h-12 rounded-xl flex items-center justify-center font-bold text-sm transition-all active:scale-90 min-w-0 ${
-                    editingMetric && progressMetrics[editingMetric]?.current === num
-                      ? 'bg-primary text-primary-foreground shadow-lg ring-2 ring-primary/30'
-                      : 'bg-muted hover:bg-primary hover:text-primary-foreground'
-                  }`}
-                >
-                  {num}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setEditingMetric(null)}
-              className="w-full py-4 text-xs font-bold uppercase text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              Отмена
-            </button>
-          </div>
-        </div>
-      )}
+      <ModalOverlay isOpen={!!editingMetric} onClose={() => setEditingMetric(null)} title="Выберите значение от 1 до 10">
+        <ScaleInput
+          value={editingMetric ? progressMetrics[editingMetric]?.current : undefined}
+          onChange={(num) => updateMetricValue(num)}
+          activeColor="bg-primary text-primary-foreground"
+          columns={5}
+        />
+        <button
+          onClick={() => setEditingMetric(null)}
+          className="w-full py-4 text-xs font-bold uppercase text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Отмена
+        </button>
+      </ModalOverlay>
 
       {/* Point A Modal - Аудит 7 вулканов */}
-      {isPointAModalOpen && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-5">
-            <div className="flex items-center justify-between">
+      <ModalOverlay
+        isOpen={isPointAModalOpen}
+        onClose={() => setIsPointAModalOpen(false)}
+        title="Аудит 7 вулканов"
+        icon={<Flag size={20} className="text-amber-500" />}
+      >
+        <p className="text-xs text-muted-foreground font-medium">
+          Оцени свою удовлетворенность сферами жизни от 1 до 10
+        </p>
+
+        <div className="space-y-4">
+          {volcanoes.map((v, i) => (
+            <div key={i} className="p-4 card-round bg-white/50 border border-white/40 space-y-3">
               <div className="flex items-center space-x-3">
-                <Flag size={20} className="text-amber-500" />
-                <h2 className="text-xl font-black text-foreground">Аудит 7 вулканов</h2>
-              </div>
-              <button onClick={() => setIsPointAModalOpen(false)} className="text-slate-300 hover:text-slate-600 p-2">
-                <X size={24} />
-              </button>
-            </div>
-
-            <p className="text-xs text-muted-foreground font-medium">
-              Оцени свою удовлетворенность сферами жизни от 1 до 10
-            </p>
-
-            <div className="space-y-4">
-              {volcanoes.map((v, i) => (
-                <div key={i} className="p-4 card-round bg-white/50 border border-white/40 space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <VolcanoIcon value={v.value} />
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-foreground">{i + 1}. {v.name}</p>
-                    </div>
-                    <span className="text-lg font-black text-foreground">{v.value}</span>
-                  </div>
-
-                  {/* Buttons 1-10 */}
-                  <div className="grid grid-cols-10 gap-0.5">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                      <button
-                        key={num}
-                        onClick={() => updateVolcanoValue(i, num)}
-                        className={`h-8 rounded-lg text-[10px] font-bold transition-all ${
-                          v.value === num
-                            ? 'bg-amber-500 text-white scale-110 shadow-md z-10'
-                            : 'text-slate-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Comment field when value < 8 */}
-                  {v.value < 8 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Что мне нужно добавить, чтобы было 10?
-                      </p>
-                      <div className="relative">
-                        <textarea
-                          value={v.comment}
-                          onChange={(e) => updateVolcanoComment(i, e.target.value)}
-                          placeholder="напишите конкретные шаги..."
-                          rows={3}
-                          className="w-full p-4 pr-12 bg-white border border-slate-100 rounded-2xl text-sm focus:outline-none focus:border-purple-200 resize-none font-medium text-slate-700 leading-relaxed"
-                        />
-                        <button
-                          onClick={() => fixVolcanoComment(i)}
-                          className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
-                            savedStatus === i
-                              ? 'bg-[#D9FF5F] text-[#8EAC24] scale-105'
-                              : 'bg-slate-900 text-white hover:bg-slate-800'
-                          }`}
-                        >
-                          <Check size={14} className={savedStatus === i ? 'animate-in' : ''} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                <VolcanoIcon value={v.value} />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-foreground">{i + 1}. {v.name}</p>
                 </div>
-              ))}
-            </div>
+                <span className="text-lg font-black text-foreground">{v.value}</span>
+              </div>
 
-            <button
-              onClick={() => setIsPointAModalOpen(false)}
-              className="w-full py-5 btn-dark"
-            >
-              Завершить аудит
-            </button>
-          </div>
+              <ScaleInput
+                value={v.value}
+                onChange={(num) => updateVolcanoValue(i, num)}
+                activeColor="bg-amber-500 text-white scale-110"
+              />
+
+              {/* Comment field when value < 8 */}
+              {v.value < 8 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    Что мне нужно добавить, чтобы было 10?
+                  </p>
+                  <div className="relative">
+                    <textarea
+                      value={v.comment}
+                      onChange={(e) => updateVolcanoComment(i, e.target.value)}
+                      placeholder="напишите конкретные шаги..."
+                      rows={3}
+                      className="w-full p-4 pr-12 bg-card border border-muted rounded-2xl text-sm focus:outline-none focus:border-secondary resize-none font-medium text-foreground leading-relaxed"
+                    />
+                    <button
+                      onClick={() => fixVolcanoComment(i)}
+                      className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
+                        savedStatus === i
+                          ? 'bg-primary text-primary-foreground scale-105'
+                          : 'bg-foreground text-background hover:bg-foreground/80'
+                      }`}
+                    >
+                      <Check size={14} className={savedStatus === i ? 'animate-in' : ''} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-      )}
+
+        <button
+          onClick={() => setIsPointAModalOpen(false)}
+          className="w-full py-5 btn-dark"
+        >
+          Завершить аудит
+        </button>
+      </ModalOverlay>
 
       {/* Point B Modal - Итоги менторства */}
-      {isPointBModalOpen && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Rocket size={20} className="text-secondary" />
-                <h2 className="text-xl font-black text-foreground">Итоги менторства</h2>
-              </div>
-              <button onClick={() => setIsPointBModalOpen(false)} className="text-muted-foreground hover:text-foreground p-2">
-                <X size={24} />
-              </button>
-            </div>
+      <ModalOverlay
+        isOpen={isPointBModalOpen}
+        onClose={() => setIsPointBModalOpen(false)}
+        title="Итоги менторства"
+        icon={<Rocket size={20} className="text-secondary" />}
+      >
+        <p className="text-xs text-muted-foreground font-medium">
+          Заполняется на итоговой сессии. Анализ достижений и пройденного пути
+        </p>
 
-            <p className="text-xs text-muted-foreground font-medium">
-              Заполняется на итоговой сессии. Анализ достижений и пройденного пути
-            </p>
-
-            {pointBQuestions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">Вопросы для итогов менторства пока не добавлены</p>
-            ) : (
-              <div className="space-y-5">
-                {pointBQuestions.map((q) => (
-                  <div key={q.id} className="space-y-2">
-                    <p className="label-tiny">{q.question_text}</p>
-                    <div className="relative">
-                      <textarea
-                        value={pointBAnswers[q.id] || ''}
-                        onChange={(e) => setPointBAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
-                        rows={4}
-                        className="input-glass pr-12 resize-none leading-relaxed"
-                      />
-                      <button
-                        onClick={() => fixResultB(q.id)}
-                        className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
-                          savedStatusB === q.id
-                            ? 'bg-primary text-primary-foreground scale-105'
-                            : 'bg-foreground text-background hover:bg-foreground/80'
-                        }`}
-                      >
-                        <Check size={14} className={savedStatusB === q.id ? 'animate-in' : ''} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+        {pointBQuestions.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">Вопросы для итогов менторства пока не добавлены</p>
+        ) : (
+          <div className="space-y-5">
+            {pointBQuestions.map((q) => (
+              <div key={q.id} className="space-y-2">
+                <p className="label-tiny">{q.question_text}</p>
+                <div className="relative">
+                  <textarea
+                    value={pointBAnswers[q.id] || ''}
+                    onChange={(e) => setPointBAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                    rows={4}
+                    className="input-glass pr-12 resize-none leading-relaxed"
+                  />
+                  <button
+                    onClick={() => fixResultB(q.id)}
+                    className={`absolute top-3 right-3 p-2 rounded-xl shadow-sm transition-all active:scale-90 ${
+                      savedStatusB === q.id
+                        ? 'bg-primary text-primary-foreground scale-105'
+                        : 'bg-foreground text-background hover:bg-foreground/80'
+                    }`}
+                  >
+                    <Check size={14} className={savedStatusB === q.id ? 'animate-in' : ''} />
+                  </button>
+                </div>
               </div>
-            )}
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </ModalOverlay>
     </div>
   );
 };

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Sparkles, Target, BookOpen, X } from 'lucide-react';
+import { Sparkles, Target, BookOpen } from 'lucide-react';
+import ModalOverlay from '@/components/ModalOverlay';
+import ScaleInput from '@/components/ScaleInput';
 import type { DiaryEntry } from '@/types/mentoring';
 
 interface TrackingQuestion {
@@ -84,21 +86,11 @@ const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly, tracking
                 <div key={q.id} className="space-y-2">
                   <p className="label-tiny">{q.question_text}</p>
                   {q.field_type === 'scale' ? (
-                    <div className="grid grid-cols-10 gap-0.5">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                        <button
-                          key={num}
-                          onClick={() => setDailyAnswers({ ...dailyAnswers, [q.id]: num })}
-                          className={`h-8 rounded-lg text-[10px] font-bold transition-all ${
-                            dailyAnswers[q.id] === num
-                              ? 'bg-emerald-500 text-white shadow-md'
-                              : 'bg-card text-muted-foreground'
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      ))}
-                    </div>
+                    <ScaleInput
+                      value={dailyAnswers[q.id]}
+                      onChange={(num) => setDailyAnswers({ ...dailyAnswers, [q.id]: num })}
+                      activeColor="bg-emerald-500 text-white"
+                    />
                   ) : (
                     <textarea
                       value={(dailyAnswers[q.id] as string) || ''}
@@ -135,21 +127,11 @@ const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly, tracking
                 <div key={q.id} className="space-y-2">
                   <p className="label-tiny">{q.question_text}</p>
                   {q.field_type === 'scale' ? (
-                    <div className="grid grid-cols-10 gap-0.5">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                        <button
-                          key={num}
-                          onClick={() => setWeeklyAnswers({ ...weeklyAnswers, [q.id]: String(num) })}
-                          className={`h-8 rounded-lg text-[10px] font-bold transition-all ${
-                            weeklyAnswers[q.id] === String(num)
-                              ? 'bg-secondary text-white shadow-md'
-                              : 'bg-card text-muted-foreground'
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      ))}
-                    </div>
+                    <ScaleInput
+                      value={weeklyAnswers[q.id]}
+                      onChange={(num) => setWeeklyAnswers({ ...weeklyAnswers, [q.id]: String(num) })}
+                      activeColor="bg-secondary text-white"
+                    />
                   ) : (
                     <textarea
                       value={weeklyAnswers[q.id] || ''}
@@ -212,24 +194,15 @@ const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly, tracking
       )}
 
       {/* View Entry Modal */}
-      {viewingEntry && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <BookOpen size={20} className="text-secondary" />
-                <div>
-                  <h3 className="text-lg font-black text-foreground">
-                    {viewingEntry.type === 'daily' ? 'Итоги дня' : 'Итоги недели'}
-                  </h3>
-                  <p className="text-xs text-muted-foreground font-medium">{viewingEntry.date}</p>
-                </div>
-              </div>
-              <button onClick={() => setViewingEntry(null)} className="text-muted-foreground hover:text-foreground p-2">
-                <X size={24} />
-              </button>
-            </div>
-
+      <ModalOverlay
+        isOpen={!!viewingEntry}
+        onClose={() => setViewingEntry(null)}
+        title={viewingEntry?.type === 'daily' ? 'Итоги дня' : 'Итоги недели'}
+        icon={<BookOpen size={20} className="text-secondary" />}
+      >
+        {viewingEntry && (
+          <>
+            <p className="text-xs text-muted-foreground font-medium -mt-4">{viewingEntry.date}</p>
             {viewingEntry.type === 'daily' ? (
               <div className="space-y-4">
                 <div>
@@ -265,9 +238,9 @@ const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly, tracking
             <button onClick={() => setViewingEntry(null)} className="w-full py-5 btn-dark">
               Закрыть
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ModalOverlay>
     </div>
   );
 };
