@@ -20,6 +20,37 @@ const tryCreateSignedUrl = async (
 };
 
 /**
+ * Writes a loading indicator into the opened window
+ * so the user sees feedback instead of about:blank.
+ */
+const writeLoadingToWindow = (win: Window) => {
+  try {
+    win.document.open();
+    win.document.write(`
+      <!DOCTYPE html>
+      <html lang="ru">
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Загрузка…</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+               display: flex; align-items: center; justify-content: center;
+               min-height: 100vh; margin: 0; background: #111; color: #eee; }
+        .card { text-align: center; padding: 2rem; }
+        h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+        p { color: #999; font-size: 0.875rem; }
+      </style></head>
+      <body><div class="card">
+        <h1>Загрузка файла…</h1>
+        <p>Пожалуйста, подождите</p>
+      </div></body></html>
+    `);
+    win.document.close();
+  } catch {
+    // Cross-origin or closed — nothing we can do
+  }
+};
+
+/**
  * Writes an error message directly into the opened window
  * so the user sees feedback instead of about:blank.
  */
@@ -54,46 +85,69 @@ const writeErrorToWindow = (win: Window, message: string) => {
 /**
  * Opens a file from storage in a new tab.
  * - Window opened synchronously to avoid popup blockers
+ * - Loading page shown immediately (no bare about:blank)
  * - Retry with session refresh on first failure
  * - Error message written directly into the window on failure
+ * - Top-level try/catch for full error protection
  */
 export const openStorageFile = async (filePath: string): Promise<void> => {
   const newWindow = window.open('', '_blank');
 
-  // Attempt 1: try with current token
-  let result = await tryCreateSignedUrl(filePath);
-
-  // Attempt 2: if failed, refresh session and retry
-  if (result.error) {
-    console.warn('[openFile] First attempt failed:', result.error, '— refreshing session and retrying');
-
-    try {
-      await supabase.auth.refreshSession();
-    } catch (refreshErr) {
-      console.warn('[openFile] Session refresh failed:', refreshErr);
-    }
-
-    result = await tryCreateSignedUrl(filePath);
-  }
-
-  // Success — redirect the window
-  if (result.url) {
-    if (newWindow) {
-      newWindow.location.href = result.url;
-    }
-    return;
-  }
-
-  // Final failure — show error IN the window + toast on original tab
-  console.error('[openFile] Failed after retry:', result.error);
-
+  // Show loading immediately so the user never sees bare about:blank
   if (newWindow) {
-    writeErrorToWindow(newWindow, result.error || 'Неизвестная ошибка');
+    writeLoadingToWindow(newWindow);
   }
 
-  toast({
-    title: 'Ошибка открытия файла',
-    description: 'Не удалось получить ссылку на файл. Попробуйте ещё раз.',
-    variant: 'destructive',
-  });
+  try {
+    // Attempt 1: try with current token
+    let result = await tryCreateSignedUrl(filePath);
+
+    // Attempt 2: if failed, refresh session and retry
+    if (result.error) {
+      console.warn('[openFile] First attempt failed:', result.error, '— refreshing session and retrying');
+
+      try {
+        await supabase.auth.refreshSession();
+      } catch (refreshErr) {
+        console.warn('[openFile] Session refresh failed:', refreshErr);
+      }
+
+      result = await tryCreateSignedUrl(filePath);
+    }
+
+    // Success — redirect the window
+    if (result.url) {
+      if (newWindow) {
+        newWindow.location.href = result.url;
+      }
+      return;
+    }
+
+    // Final failure — show error IN the window + toast on original tab
+    console.error('[openFile] Failed after retry:', result.error);
+
+    if (newWindow) {
+      writeErrorToWindow(newWindow, result.error || 'Неизвестная ошибка');
+    }
+
+    toast({
+      title: 'Ошибка открытия файла',
+      description: 'Не удалось получить ссылку на файл. Попробуйте ещё раз.',
+      variant: 'destructive',
+    });
+  } catch (err) {
+    // Catch ANY thrown exception (network, CORS, race condition, etc.)
+    const message = err instanceof Error ? err.message : 'Неизвестная ошибка';
+    console.error('[openFile] Unexpected error:', err);
+
+    if (newWindow) {
+      writeErrorToWindow(newWindow, message);
+    }
+
+    toast({
+      title: 'Ошибка открытия файла',
+      description: 'Произошла непредвиденная ошибка. Попробуйте ещё раз.',
+      variant: 'destructive',
+    });
+  }
 };
