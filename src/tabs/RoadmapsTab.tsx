@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { CheckCircle2, Circle, Trash2, Plus, Pencil, X, ExternalLink } from 'lucide-react';
+import { CheckCircle2, Circle, Trash2, Plus, Pencil, ExternalLink } from 'lucide-react';
 import { externalDb } from '@/lib/externalDb';
 import { openStorageFile } from '@/lib/openFile';
+import ModalOverlay from '@/components/ModalOverlay';
 import type { Roadmap } from '@/types/mentoring';
 
 interface RoadmapsTabProps {
@@ -153,19 +154,14 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
       ))}
 
       {/* Roadmap Detail Modal */}
-      {selectedRoadmap && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-black text-foreground">{selectedRoadmap.title}</h2>
-                <p className="text-xs text-muted-foreground font-medium">План действий</p>
-              </div>
-              <button onClick={() => setSelectedRoadmapId(null)} className="text-muted-foreground hover:text-foreground p-2">
-                <X size={24} />
-              </button>
-            </div>
-
+      <ModalOverlay
+        isOpen={!!selectedRoadmap}
+        onClose={() => setSelectedRoadmapId(null)}
+        title={selectedRoadmap?.title || ''}
+      >
+        {selectedRoadmap && (
+          <>
+            <p className="text-xs text-muted-foreground font-medium -mt-4">План действий</p>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="label-tiny">Список шагов:</p>
@@ -222,9 +218,9 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
             >
               Сохранить
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ModalOverlay>
     </div>
   );
 };

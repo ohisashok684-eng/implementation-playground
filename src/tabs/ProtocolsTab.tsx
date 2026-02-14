@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Zap, Pencil, ExternalLink, FileText, Upload } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { uploadFile } from '@/lib/uploadFile';
 import { externalDb } from '@/lib/externalDb';
 import { openStorageFile } from '@/lib/openFile';
 import ModalOverlay from '@/components/ModalOverlay';
@@ -51,11 +51,8 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
 
     // Upload new file if selected
     if (newFile) {
-      const protocol = protocols.find(p => p.id === editingId);
-      const ext = newFile.name.split('.').pop();
-      const path = `protocols/${editingId}/${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, newFile);
-      if (upErr) {
+      const path = await uploadFile(`protocols/${editingId}`, newFile);
+      if (!path) {
         onNotify({ type: 'error', message: 'Ошибка загрузки файла' });
         return;
       }

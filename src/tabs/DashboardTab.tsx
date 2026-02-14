@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Navigation, ChevronRight, Flag, Rocket, ArrowRight, Pencil, Plus, MessageSquare, FileText, ExternalLink, CheckCircle2, Circle, Trash2, X } from 'lucide-react';
 import { externalDb } from '@/lib/externalDb';
+import { formatAmount } from '@/lib/format';
 import { openStorageFile } from '@/lib/openFile';
+import ModalOverlay from '@/components/ModalOverlay';
 import MetricRing from '@/components/MetricRing';
 import type { Goal, Session, ProgressMetric, RouteInfo } from '@/types/mentoring';
 
@@ -18,11 +20,6 @@ interface DashboardTabProps {
   onOpenPointB: () => void;
   onUpdateSessions: (sessions: Session[]) => void;
 }
-
-const formatAmount = (val: string) => {
-  if (!val) return '0';
-  return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-};
 
 const DashboardTab = ({
   routeInfo,
@@ -241,19 +238,14 @@ const DashboardTab = ({
       </section>
 
       {/* Steps Edit Modal */}
-      {editingSession && (
-        <div className="fixed inset-0 bg-foreground/40 backdrop-blur-md z-[700] flex items-center justify-center p-4 animate-in">
-          <div className="glass-strong card-round-lg w-full max-w-md max-h-[85vh] overflow-y-auto p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-black text-foreground">Сессия №{editingSession.number}</h2>
-                <p className="text-xs text-muted-foreground font-medium">Шаги после сессии</p>
-              </div>
-              <button onClick={() => setEditingStepsSessionId(null)} className="text-muted-foreground hover:text-foreground p-2">
-                <X size={24} />
-              </button>
-            </div>
-
+      <ModalOverlay
+        isOpen={!!editingSession}
+        onClose={() => setEditingStepsSessionId(null)}
+        title={editingSession ? `Сессия №${editingSession.number}` : ''}
+      >
+        {editingSession && (
+          <>
+            <p className="text-xs text-muted-foreground font-medium -mt-4">Шаги после сессии</p>
             <div className="space-y-3">
               {editingSession.steps.map((step, i) => (
                 <div key={i} className="relative group p-3 card-round bg-background/60 space-y-2">
@@ -323,9 +315,9 @@ const DashboardTab = ({
             >
               Готово
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ModalOverlay>
     </div>
   );
 };
