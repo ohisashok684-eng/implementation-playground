@@ -1,93 +1,106 @@
 
-## Проблема: платформа грузится очень долго или не загружается
 
-При входе пользователя компонент Index.tsx одновременно отправляет **10 отдельных HTTP-запросов** к backend-функции `external-db`. Каждый запрос:
-- Вызывает отдельный холодный старт backend-функции
-- Создаёт **отдельное TCP-соединение** к внешнему серверу PostgreSQL
-- Конкурирует за ограниченное число соединений на внешнем сервере
+## Диагностика: почему платформа зависает
 
-Когда 10+ соединений приходят одновременно, внешний сервер начинает отклонять или ставить в очередь запросы. Результат -- часть данных не загружается, страница зависает, или вообще не открывается.
+Найдено **4 критические проблемы**:
 
-## Решение: объединить все запросы в один
+### 1. Edge-функция создаёт новое подключение к БД на КАЖДЫЙ запрос
 
-Вместо 10 отдельных вызовов -- один запрос `batch`, который выполняет все 10 SQL-запросов в рамках одного соединения к БД.
+В `external-db/index.ts` функция `getPool()` вызывается внутри обработчика запроса. Это значит, что каждый HTTP-вызов создаёт новый TCP connection pool к внешнему PostgreSQL серверу. Установка TCP-соединения с удалённым сервером занимает 2-5 секунд, а если сервер в РФ и edge-функция в другом регионе -- до 10 секунд.
 
-```text
-БЫЛО (10 запросов, 10 соединений):
-  Index.tsx загружается
-       |
-       +--> fetch(external-db?action=select, goals)       --> Pool -> connect -> query
-       +--> fetch(external-db?action=select, sessions)    --> Pool -> connect -> query
-       +--> fetch(external-db?action=select, protocols)   --> Pool -> connect -> query
-       +--> fetch(external-db?action=select, roadmaps)    --> Pool -> connect -> query
-       +--> fetch(external-db?action=select, volcanoes)   --> Pool -> connect -> query
-       +--> fetch(external-db?action=select, metrics)     --> Pool -> connect -> query
-       +--> fetch(external-db?action=select, route_info)  --> Pool -> connect -> query
-       +--> fetch(external-db?action=select, diary)       --> Pool -> connect -> query
-       +--> fetch(external-db?action=select, questions)   --> Pool -> connect -> query
-       +--> fetch(external-db?action=select, answers)     --> Pool -> connect -> query
+**Исправление**: вынести создание пула на уровень модуля. В Deno Deploy (на котором работают backend-функции) модульный код сохраняется между вызовами на одном изоляте -- повторные запросы будут переиспользовать уже открытое соединение.
 
-СТАНЕТ (1 запрос, 1 соединение):
-  Index.tsx загружается
-       |
-       +--> fetch(external-db?action=batch, [все 10 запросов])
-                  |
-                  v
-            Pool -> connect -> query1 -> query2 -> ... -> query10
-                  |
-                  v
-            Один ответ со всеми данными
-```
+### 2. Нет таймаута на HTTP-запросы к backend-функции
+
+В `externalDb.ts` функция `call()` использует обычный `fetch()` без `AbortController` и таймаута. Если edge-функция зависает (cold start, медленная БД), фронтенд ждёт бесконечно -- "вечная загрузка".
+
+**Исправление**: добавить `AbortController` с таймаутом 30 секунд + автоматический retry (1 повторная попытка).
+
+### 3. Страница "Трекинг" делает ОТДЕЛЬНЫЙ запрос
+
+`TrackingTab` при каждом открытии вызывает `externalDb.select('tracking_questions')` -- это ещё один HTTP-вызов к edge-функции, ещё одно создание пула, ещё одно ожидание. При этом данные `tracking_questions` уже загружаются в batch-запросе Index.tsx (нет, на самом деле НЕ загружаются -- в batch есть `point_b_questions`, но нет `tracking_questions`).
+
+**Исправление**: включить `tracking_questions` в основной batch-запрос в `Index.tsx` и передавать вопросы в `TrackingTab` как props вместо отдельного запроса.
+
+### 4. Кнопка "Выйти" работает через раз
+
+Функция `signOut` ожидает ответ от auth-сервера (`await supabase.auth.signOut()`). Если сеть медленная, кнопка выглядит "мёртвой". Нужно сначала очистить состояние (мгновенный UI-отклик), а потом делать серверный вызов.
 
 ## Затронутые файлы
 
 ### 1. `supabase/functions/external-db/index.ts`
-- Добавить новый action `batch` -- принимает массив запросов, выполняет их последовательно через одно соединение, возвращает массив результатов
-- Это не требует изменения существующих actions -- они продолжат работать для отдельных операций
+- Вынести `getPool()` на уровень модуля (lazy singleton)
+- Переиспользовать пул между запросами на одном изоляте
 
 ### 2. `src/lib/externalDb.ts`
-- Добавить метод `externalDb.batch(queries)` -- отправляет один HTTP-запрос с массивом операций
+- Добавить `AbortController` с таймаутом 30 секунд
+- Добавить 1 автоматический retry при ошибке
+- Улучшить обработку ошибок
 
 ### 3. `src/pages/Index.tsx`
-- Заменить `Promise.all` из 10 отдельных `externalDb.select()` на один вызов `externalDb.batch()`
-- Парсить результат из единого ответа
+- Добавить `tracking_questions` в batch-запрос (11-й запрос)
+- Передавать загруженные вопросы в `TrackingTab` через props
+
+### 4. `src/tabs/TrackingTab.tsx`
+- Убрать `useEffect` с отдельным `externalDb.select`
+- Принимать `trackingQuestions` через props
+- Убрать состояние `loading` (данные уже готовы от родителя)
+
+### 5. `src/hooks/useAuth.tsx`
+- В `signOut`: сначала очистить state (мгновенный UI), потом вызывать `supabase.auth.signOut()` в фоне
 
 ## Технические детали
 
-### Новый action `batch` в edge-функции
-
-Принимает массив операций и выполняет их последовательно через одно DB-соединение:
-
+### Singleton пул в edge-функции:
 ```typescript
-// Запрос:
-{ queries: [
-  { action: "select", table: "goals", filters: { user_id: "..." } },
-  { action: "select", table: "sessions", filters: { user_id: "..." }, order: { column: "session_number", ascending: true } },
-  // ... ещё 8 запросов
-]}
-
-// Ответ:
-{ results: [
-  { data: [...goals] },
-  { data: [...sessions] },
-  // ... 
-]}
+let pool: Pool | null = null;
+function getPool() {
+  if (pool) return pool;
+  // ...создание пула...
+  pool = new Pool(...);
+  return pool;
+}
 ```
 
-### Новый метод в externalDb.ts
-
+### Таймаут и retry в externalDb.ts:
 ```typescript
-batch: (queries: Array<{ action: string; table: string; [key: string]: any }>) =>
-  call('batch', { queries })
+async function call(action, body, attempt = 0) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(url, { signal: controller.signal, ... });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(...);
+    return res.json();
+  } catch (err) {
+    clearTimeout(timeout);
+    if (attempt < 1) return call(action, body, attempt + 1);
+    throw err;
+  }
+}
 ```
 
-### Изменение в Index.tsx
+### Мгновенный signOut:
+```typescript
+const signOut = async () => {
+  setUser(null);
+  setSession(null);
+  setRole(null);
+  setProfileName(null);
+  // Фоновый вызов -- не блокирует UI
+  supabase.auth.signOut().catch(() => {});
+};
+```
 
-Вместо 10 вызовов `externalDb.select()` -- один вызов `externalDb.batch()` с массивом из 10 запросов, затем распаковка результатов по индексу.
+## Про РУ-зону
+
+Адаптация под РФ-зону не нужна на уровне кода. Проблема в том, что edge-функции работают в ближайшем к пользователю регионе, а внешний PostgreSQL сервер может быть далеко. Решение -- переиспользование соединений (пункт 1), что убирает повторный overhead на каждый запрос. Код уже полностью русифицирован и не зависит от региональных настроек браузера.
 
 ## Ожидаемый результат
 
-- Загрузка ускорится в 5-10 раз (один запрос вместо десяти)
-- Исчезнут ошибки из-за перегрузки внешнего сервера
-- Платформа будет стабильно загружаться с первого раза
-- Существующий функционал (отдельные select/insert/update) продолжит работать без изменений
+- Первая загрузка: 3-5 секунд вместо 15-30+
+- Повторные загрузки (warm start): 1-2 секунды
+- Трекинг: загружается мгновенно (данные уже есть)
+- Выход: мгновенный отклик
+- При сбоях: автоматический retry вместо вечной загрузки
+
