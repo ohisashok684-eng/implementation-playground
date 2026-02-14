@@ -8,8 +8,12 @@ const corsHeaders = {
 
 const SCHEMA = "mentoring";
 
+// Lazy singleton pool — reused across requests on the same isolate
+let _pool: Pool | null = null;
+
 function getPool() {
-  // Strip leading "=" from env values (in case they were saved with KEY=VALUE format)
+  if (_pool) return _pool;
+
   const strip = (v: string | undefined) => v?.replace(/^=/, "") || "";
   const host = strip(Deno.env.get("POSTGRESQL_HOST"));
   const port = strip(Deno.env.get("POSTGRESQL_PORT"));
@@ -23,7 +27,7 @@ function getPool() {
     throw new Error("External DB credentials not configured");
   }
 
-  return new Pool(
+  _pool = new Pool(
     {
       hostname: host,
       port: parseInt(port || "5432"),
@@ -32,9 +36,10 @@ function getPool() {
       database,
       tls: { enabled: false },
     },
-    1,
+    3,
     true
   );
+  return _pool;
 }
 
 // Helper to get authenticated user from Supabase JWT
