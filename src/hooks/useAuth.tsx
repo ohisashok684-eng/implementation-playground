@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -28,64 +28,68 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<'super_admin' | 'user' | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const initializedRef = useRef(false);
 
-  const fetchRole = async (userId: string) => {
+  // Single function that loads profile + role for a given session
+  const loadUserData = async (sess: Session | null) => {
+    if (!sess?.user) {
+      setUser(null);
+      setSession(null);
+      setRole(null);
+      setProfileName(null);
+      return;
+    }
+
+    setSession(sess);
+    setUser(sess.user);
+
     try {
-      const { data } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .maybeSingle();
-      setRole((data?.role as 'super_admin' | 'user') ?? 'user');
+      // Load profile and role in parallel
+      const [profileRes, roleRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('is_blocked, full_name')
+          .eq('user_id', sess.user.id)
+          .maybeSingle(),
+        supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', sess.user.id)
+          .maybeSingle(),
+      ]);
+
+      // Check if blocked
+      if (profileRes.data?.is_blocked) {
+        await supabase.auth.signOut();
+        setUser(null);
+        setSession(null);
+        setRole(null);
+        setProfileName(null);
+        return;
+      }
+
+      setProfileName(profileRes.data?.full_name ?? null);
+      setRole((roleRes.data?.role as 'super_admin' | 'user') ?? 'user');
     } catch (error) {
-      console.error('Error fetching role:', error);
+      console.error('Error loading user data:', error);
       setRole('user');
     }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('is_blocked, full_name')
-            .eq('user_id', session.user.id)
-            .maybeSingle();
-          setProfileName(profile?.full_name ?? null);
-          if (profile?.is_blocked) {
-            await supabase.auth.signOut();
-            setUser(null);
-            setSession(null);
-            setRole(null);
-            return;
-          }
-          await fetchRole(session.user.id);
-        } else {
-          setRole(null);
-          setProfileName(null);
-        }
-      } catch (error) {
-        console.error('Auth state change error:', error);
-      } finally {
-        setLoading(false);
-      }
+    // 1. Set up listener FIRST (before getSession)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, sess) => {
+      // Skip if this is the initial event and getSession already handled it
+      if (!initializedRef.current) return;
+
+      await loadUserData(sess);
     });
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      try {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await fetchRole(session.user.id);
-        }
-      } catch (error) {
-        console.error('Get session error:', error);
-      } finally {
-        setLoading(false);
-      }
+    // 2. Get initial session
+    supabase.auth.getSession().then(async ({ data: { session: sess } }) => {
+      await loadUserData(sess);
+      initializedRef.current = true;
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();

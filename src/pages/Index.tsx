@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { User, Plus, Trash2, X, Flag, Rocket, Check, LogOut } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { User, Plus, Trash2, X, Flag, Rocket, Check, LogOut, RefreshCw, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { externalDb } from '@/lib/externalDb';
 import { formatAmount } from '@/lib/format';
@@ -36,6 +36,7 @@ const Index = () => {
   const [sessions, setSessions] = useState(initialSessions);
   const [diaryEntries, setDiaryEntries] = useState(initialDiaryEntries);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [volcanoes, setVolcanoes] = useState(initialVolcanoes);
   const [progressMetrics, setProgressMetrics] = useState(initialProgressMetrics);
   const [roadmaps, setRoadmaps] = useState(initialRoadmaps);
@@ -67,144 +68,101 @@ const Index = () => {
   const [isPointBModalOpen, setIsPointBModalOpen] = useState(false);
 
   // Load all data from DB
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!user) return;
-    const load = async () => {
-      try {
-        const batchResponse = await externalDb.batch([
-          { action: 'select', table: 'goals', filters: { user_id: user.id } },
-          { action: 'select', table: 'sessions', filters: { user_id: user.id }, order: { column: 'session_number', ascending: true } },
-          { action: 'select', table: 'protocols', filters: { user_id: user.id } },
-          { action: 'select', table: 'roadmaps', filters: { user_id: user.id }, withSteps: true },
-          { action: 'select', table: 'volcanoes', filters: { user_id: user.id } },
-          { action: 'select', table: 'progress_metrics', filters: { user_id: user.id } },
-          { action: 'select', table: 'route_info', filters: { user_id: user.id }, single: true },
-          { action: 'select', table: 'diary_entries', filters: { user_id: user.id }, order: { column: 'created_at', ascending: false } },
-          { action: 'select', table: 'point_b_questions', filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } },
-          { action: 'select', table: 'point_b_answers', filters: { user_id: user.id } },
-          { action: 'select', table: 'tracking_questions', filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } },
-        ]);
+    setLoadError(null);
+    setDataLoaded(false);
+    try {
+      const batchResponse = await externalDb.batch([
+        { action: 'select', table: 'goals', filters: { user_id: user.id } },
+        { action: 'select', table: 'sessions', filters: { user_id: user.id }, order: { column: 'session_number', ascending: true } },
+        { action: 'select', table: 'protocols', filters: { user_id: user.id } },
+        { action: 'select', table: 'roadmaps', filters: { user_id: user.id }, withSteps: true },
+        { action: 'select', table: 'volcanoes', filters: { user_id: user.id } },
+        { action: 'select', table: 'progress_metrics', filters: { user_id: user.id } },
+        { action: 'select', table: 'route_info', filters: { user_id: user.id }, single: true },
+        { action: 'select', table: 'diary_entries', filters: { user_id: user.id }, order: { column: 'created_at', ascending: false } },
+        { action: 'select', table: 'point_b_questions', filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } },
+        { action: 'select', table: 'point_b_answers', filters: { user_id: user.id } },
+        { action: 'select', table: 'tracking_questions', filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } },
+      ]);
 
-        const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes, trackingQRes] = batchResponse.results;
+      const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes, trackingQRes] = batchResponse.results;
 
-        // Goals
-        if (goalsRes.data && goalsRes.data.length > 0) {
-          setGoals(goalsRes.data.map((g: any) => ({
-            id: g.id,
-            title: g.title,
-            amount: g.amount || '',
-            hasAmount: g.has_amount,
-            progress: g.progress,
-          })));
-        }
-
-        // Sessions
-        if (sessionsRes.data && sessionsRes.data.length > 0) {
-          setSessions(sessionsRes.data.map((s: any) => ({
-            id: s.id,
-            number: s.session_number,
-            date: s.session_date,
-            time: s.session_time,
-            summary: s.summary,
-            steps: s.steps || [],
-            gradient: s.gradient,
-            files: s.files || [],
-          })));
-        }
-
-        // Protocols
-        if (protocolsRes.data && protocolsRes.data.length > 0) {
-          setProtocols(protocolsRes.data.map((p: any) => ({
-            id: p.id,
-            title: p.title,
-            desc: p.description,
-            icon: p.icon,
-            color: p.color,
-            fileName: p.file_name,
-            fileUrl: p.file_url || undefined,
-          })));
-        }
-
-        // Roadmaps
-        if (roadmapsRes.data && roadmapsRes.data.length > 0) {
-          setRoadmaps(roadmapsRes.data.map((r: any) => ({
-            id: r.id,
-            title: r.title,
-            status: r.status,
-            description: r.description,
-            fileUrl: r.file_url || undefined,
-            steps: (r.roadmap_steps || [])
-              .sort((a: any, b: any) => a.sort_order - b.sort_order)
-              .map((st: any) => ({
-                text: st.text,
-                done: st.done,
-                deadline: st.deadline || '',
-              })),
-          })));
-        }
-
-        // Volcanoes
-        if (volcanoesRes.data && volcanoesRes.data.length > 0) {
-          setVolcanoes(volcanoesRes.data.map((v: any) => ({
-            name: v.name,
-            value: v.value,
-            comment: v.comment,
-          })));
-        }
-
-        // Metrics
-        if (metricsRes.data && metricsRes.data.length > 0) {
-          const mapped: Record<string, any> = {};
-          metricsRes.data.forEach((m: any) => {
-            mapped[m.metric_key] = {
-              label: m.label,
-              current: m.current_value,
-              previous: m.previous_value,
-            };
-          });
-          setProgressMetrics(prev => ({ ...prev, ...mapped }));
-        }
-
-        // Route info
-        if (routeRes.data) {
-          setRouteInfo({
-            sessionsTotal: routeRes.data.sessions_total,
-            sessionsDone: routeRes.data.sessions_done,
-            timeWeeks: routeRes.data.time_weeks,
-            resources: routeRes.data.resources || [],
-          });
-        }
-
-        // Diary
-        if (diaryRes.data && diaryRes.data.length > 0) {
-          setDiaryEntries(diaryRes.data.map((d: any) => ({
-            id: d.id,
-            type: d.entry_type as 'daily' | 'weekly',
-            date: d.entry_date,
-            energy: d.energy ?? undefined,
-            text: d.text ?? undefined,
-            intent: d.intent ?? undefined,
-            achievements: d.achievements ?? undefined,
-            lessons: d.lessons ?? undefined,
-            nextStep: d.next_step ?? undefined,
-          })));
-        }
-
-        // Point B
-        setPointBQuestions(questionsRes.data ?? []);
-        const answerMap: Record<string, string> = {};
-        (answersRes.data ?? []).forEach((a: any) => { answerMap[a.question_id] = a.answer_text; });
-        setPointBAnswers(answerMap);
-
-        // Tracking questions
-        setTrackingQuestions(trackingQRes.data ?? []);
-      } catch (err) {
-        console.error('Error loading data from external DB:', err);
+      if (goalsRes.data && goalsRes.data.length > 0) {
+        setGoals(goalsRes.data.map((g: any) => ({
+          id: g.id, title: g.title, amount: g.amount || '', hasAmount: g.has_amount, progress: g.progress,
+        })));
       }
+
+      if (sessionsRes.data && sessionsRes.data.length > 0) {
+        setSessions(sessionsRes.data.map((s: any) => ({
+          id: s.id, number: s.session_number, date: s.session_date, time: s.session_time,
+          summary: s.summary, steps: s.steps || [], gradient: s.gradient, files: s.files || [],
+        })));
+      }
+
+      if (protocolsRes.data && protocolsRes.data.length > 0) {
+        setProtocols(protocolsRes.data.map((p: any) => ({
+          id: p.id, title: p.title, desc: p.description, icon: p.icon, color: p.color,
+          fileName: p.file_name, fileUrl: p.file_url || undefined,
+        })));
+      }
+
+      if (roadmapsRes.data && roadmapsRes.data.length > 0) {
+        setRoadmaps(roadmapsRes.data.map((r: any) => ({
+          id: r.id, title: r.title, status: r.status, description: r.description,
+          fileUrl: r.file_url || undefined,
+          steps: (r.roadmap_steps || [])
+            .sort((a: any, b: any) => a.sort_order - b.sort_order)
+            .map((st: any) => ({ text: st.text, done: st.done, deadline: st.deadline || '' })),
+        })));
+      }
+
+      if (volcanoesRes.data && volcanoesRes.data.length > 0) {
+        setVolcanoes(volcanoesRes.data.map((v: any) => ({
+          name: v.name, value: v.value, comment: v.comment,
+        })));
+      }
+
+      if (metricsRes.data && metricsRes.data.length > 0) {
+        const mapped: Record<string, any> = {};
+        metricsRes.data.forEach((m: any) => {
+          mapped[m.metric_key] = { label: m.label, current: m.current_value, previous: m.previous_value };
+        });
+        setProgressMetrics(prev => ({ ...prev, ...mapped }));
+      }
+
+      if (routeRes.data) {
+        setRouteInfo({
+          sessionsTotal: routeRes.data.sessions_total, sessionsDone: routeRes.data.sessions_done,
+          timeWeeks: routeRes.data.time_weeks, resources: routeRes.data.resources || [],
+        });
+      }
+
+      if (diaryRes.data && diaryRes.data.length > 0) {
+        setDiaryEntries(diaryRes.data.map((d: any) => ({
+          id: d.id, type: d.entry_type as 'daily' | 'weekly', date: d.entry_date,
+          energy: d.energy ?? undefined, text: d.text ?? undefined, intent: d.intent ?? undefined,
+          achievements: d.achievements ?? undefined, lessons: d.lessons ?? undefined, nextStep: d.next_step ?? undefined,
+        })));
+      }
+
+      setPointBQuestions(questionsRes.data ?? []);
+      const answerMap: Record<string, string> = {};
+      (answersRes.data ?? []).forEach((a: any) => { answerMap[a.question_id] = a.answer_text; });
+      setPointBAnswers(answerMap);
+      setTrackingQuestions(trackingQRes.data ?? []);
       setDataLoaded(true);
-    };
-    load();
+    } catch (err) {
+      console.error('Error loading data from external DB:', err);
+      setLoadError('Не удалось загрузить данные. Проверьте подключение к сети.');
+    }
   }, [user]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Auto-hide notification
   useEffect(() => {
@@ -391,6 +349,35 @@ const Index = () => {
   };
 
   // formatAmount imported from lib
+
+  // Loading screen
+  if (!dataLoaded && !loadError) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <Loader2 size={32} className="text-primary animate-spin" />
+        <p className="text-sm text-muted-foreground font-medium">Загрузка данных...</p>
+      </div>
+    );
+  }
+
+  // Error screen
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-6">
+        <div className="text-center space-y-3">
+          <p className="text-sm font-semibold text-foreground">Ошибка загрузки</p>
+          <p className="text-xs text-muted-foreground">{loadError}</p>
+        </div>
+        <button
+          onClick={loadData}
+          className="flex items-center gap-2 px-6 py-3 btn-dark rounded-xl"
+        >
+          <RefreshCw size={16} />
+          Повторить
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
