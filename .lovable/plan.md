@@ -1,46 +1,53 @@
 
 
-## Исправление: файлы открываются как about:blank
+## Fix: Files Only Open Once, Then about:blank
 
-### Диагностика
+### Root Cause
 
-Проблема НЕ в свежести токена (добавление `ensureFreshToken` не помогло). Анализ выявил несколько возможных причин:
+Two issues combine to break subsequent file opens:
 
-1. **`createSignedUrl` возвращает ошибку** -- toast показывается на ОРИГИНАЛЬНОЙ вкладке, а пользователь смотрит на новую вкладку с about:blank. `newWindow.close()` не срабатывает в некоторых браузерах.
-2. **Избыточный вызов `refreshSession()`** -- если `expires_at` равен null/0, условие `expiresAt - nowSec < 60` ВСЕГДА истинно, что вызывает ненужное обновление токена при каждом клике.
-3. **Отсутствие retry при ошибке storage** -- в отличие от `externalDb.ts`, у storage-запросов нет механизма повторной попытки при 401.
+1. **Unstable session reference in useAuth**: `setSession(sess)` is called on EVERY `onAuthStateChange` event (including TOKEN_REFRESHED). This creates a new context object, causing ALL consumers to re-render -- even though only `session` changed and most components don't use it. These cascading re-renders during async file-open operations can disrupt in-flight requests.
 
-### План исправления
+2. **No error protection in openStorageFile**: The async chain (`tryCreateSignedUrl`, `refreshSession`) has no top-level try/catch. If any call throws (network error, CORS, race condition from re-render), the promise rejects unhandled and the window stays at `about:blank` -- our `writeErrorToWindow` never runs.
 
-#### `src/lib/openFile.ts` -- полная переработка
+3. **Window shows blank during async work**: Between `window.open('', '_blank')` and receiving the signed URL, the user sees a white `about:blank` page. If anything goes wrong, this is what remains.
 
-1. **Убрать отдельную функцию `ensureFreshToken`** и встроить логику проверки токена прямо в `openStorageFile`
-2. **Добавить retry при ошибке**: если `createSignedUrl` вернул ошибку, принудительно обновить сессию через `refreshSession()` и попробовать ещё раз
-3. **Написать сообщение в пустое окно** вместо попытки его закрыть: если произошла ошибка, записать в окно HTML-сообщение "Не удалось открыть файл. Закройте эту вкладку." -- это гарантирует, что пользователь увидит ошибку независимо от того, на какой вкладке он находится
-4. **Добавить диагностическое логирование**: console.warn при ошибке createSignedUrl и при retry, чтобы в будущем было проще отлаживать
+### Fix Plan
 
-Итоговая логика:
+#### 1. `src/hooks/useAuth.tsx` -- Stabilize session reference
+
+Add the same pattern used for `user`: only call `setSession(sess)` if the access token actually changed. This prevents unnecessary context updates and re-renders on token refresh.
 
 ```text
-1. window.open('', '_blank')  -- синхронно, обход блокировщиков
-2. createSignedUrl(filePath)  -- первая попытка с текущим токеном
-3. Если ошибка:
-   a. supabase.auth.refreshSession()  -- обновить токен
-   b. createSignedUrl(filePath)  -- вторая попытка
-4. Если успех: newWindow.location.href = signedUrl
-5. Если ошибка после retry:
-   a. Записать сообщение об ошибке В САМО ОКНО (не toast)
-   b. Показать toast на оригинальной вкладке тоже
+Before: setSession(sess)  -- always, on every auth event
+After:  if (sess.access_token !== sessionRef.current?.access_token) setSession(sess)
 ```
 
-### Затронутые файлы
+This stops cascading re-renders that interrupt file-opening operations.
 
-- **`src/lib/openFile.ts`** -- полная переработка с retry и записью ошибки в окно
+#### 2. `src/lib/openFile.ts` -- Two critical fixes
 
-### Результат
+**a) Write a loading page immediately** into the new window so the user never sees bare `about:blank`:
 
-- Файлы открываются даже с просроченным токеном (retry с обновлением)
-- При ошибке пользователь видит сообщение ПРЯМО В ОТКРЫТОМ ОКНЕ, а не about:blank
-- Toast-уведомление тоже показывается на основной вкладке
-- Диагностические логи помогут отладить будущие проблемы
+```text
+window.open('', '_blank')
+  -> immediately write "Loading file..." HTML into the window
+  -> then do async work (createSignedUrl)
+  -> on success: redirect window to signed URL
+  -> on failure: replace loading page with error page
+```
+
+**b) Wrap everything in try/catch** so that ANY thrown exception (not just returned errors) is handled -- the error page is written to the window and a toast is shown.
+
+### Files to Change
+
+- **`src/hooks/useAuth.tsx`** -- add `sessionRef` to stabilize session updates (prevent re-renders on token refresh)
+- **`src/lib/openFile.ts`** -- add loading page, wrap in try/catch for full error protection
+
+### Expected Result
+
+- First, second, and all subsequent files open correctly
+- No more about:blank -- user sees either "Loading..." or a clear error message
+- Token refresh no longer triggers cascading re-renders that disrupt file operations
+- All existing file-opening behavior (signed URLs, popup blocker bypass) is preserved
 
