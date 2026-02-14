@@ -30,6 +30,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const initializedRef = useRef(false);
   const userIdRef = useRef<string | null>(null);
+  const sessionTokenRef = useRef<string | null>(null);
 
   // Single function that loads profile + role for a given session
   const loadUserData = async (sess: Session | null) => {
@@ -39,11 +40,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setRole(null);
       setProfileName(null);
       userIdRef.current = null;
+      sessionTokenRef.current = null;
       return;
     }
 
-    setSession(sess);
-    // Only update user ref if the ID actually changed — prevents cascading re-renders on token refresh
+    // Only update session state if the access token actually changed — prevents cascading re-renders on token refresh
+    if (sess.access_token !== sessionTokenRef.current) {
+      sessionTokenRef.current = sess.access_token;
+      setSession(sess);
+    }
+    // Only update user ref if the ID actually changed
     if (userIdRef.current !== sess.user.id) {
       userIdRef.current = sess.user.id;
       setUser(sess.user);
