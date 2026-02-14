@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { User, Plus, Trash2, X, Flag, Rocket, Check, LogOut, RefreshCw, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { externalDb } from '@/lib/externalDb';
@@ -67,11 +67,16 @@ const Index = () => {
   const [isPointAModalOpen, setIsPointAModalOpen] = useState(false);
   const [isPointBModalOpen, setIsPointBModalOpen] = useState(false);
 
+  const initialLoadDoneRef = useRef(false);
+
   // Load all data from DB
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoadError(null);
-    setDataLoaded(false);
+    // Only show spinner on initial load, not on background refreshes
+    if (!initialLoadDoneRef.current) {
+      setDataLoaded(false);
+    }
     try {
       const batchResponse = await externalDb.batch([
         { action: 'select', table: 'goals', filters: { user_id: user.id } },
@@ -154,6 +159,7 @@ const Index = () => {
       setPointBAnswers(answerMap);
       setTrackingQuestions(trackingQRes.data ?? []);
       setDataLoaded(true);
+      initialLoadDoneRef.current = true;
     } catch (err) {
       console.error('Error loading data from external DB:', err);
       setLoadError('Не удалось загрузить данные. Проверьте подключение к сети.');
