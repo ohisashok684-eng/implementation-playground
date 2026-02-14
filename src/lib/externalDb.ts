@@ -11,20 +11,34 @@ async function getHeaders() {
   };
 }
 
-async function call(action: string, body: Record<string, any> = {}) {
+async function call(action: string, body: Record<string, any> = {}, attempt = 0): Promise<any> {
   const headers = await getHeaders();
-  const res = await fetch(`${FUNCTION_URL}?action=${action}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || 'External DB request failed');
+  try {
+    const res = await fetch(`${FUNCTION_URL}?action=${action}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || 'External DB request failed');
+    }
+
+    return res.json();
+  } catch (err) {
+    clearTimeout(timeout);
+    if (attempt < 1) {
+      console.warn(`Retrying ${action} (attempt ${attempt + 1})...`);
+      return call(action, body, attempt + 1);
+    }
+    throw err;
   }
-
-  return res.json();
 }
 
 export const externalDb = {

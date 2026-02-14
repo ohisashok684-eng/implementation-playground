@@ -39,6 +39,9 @@ const Index = () => {
   const [roadmaps, setRoadmaps] = useState(initialRoadmaps);
   const [routeInfo, setRouteInfo] = useState(initialRouteInfo);
 
+  // Tracking questions (loaded in batch)
+  const [trackingQuestions, setTrackingQuestions] = useState<any[]>([]);
+
   // Point B dynamic state
   const [pointBQuestions, setPointBQuestions] = useState<any[]>([]);
   const [pointBAnswers, setPointBAnswers] = useState<Record<string, string>>({});
@@ -77,9 +80,10 @@ const Index = () => {
           { action: 'select', table: 'diary_entries', filters: { user_id: user.id }, order: { column: 'created_at', ascending: false } },
           { action: 'select', table: 'point_b_questions', filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } },
           { action: 'select', table: 'point_b_answers', filters: { user_id: user.id } },
+          { action: 'select', table: 'tracking_questions', filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } },
         ]);
 
-        const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes] = batchResponse.results;
+        const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes, trackingQRes] = batchResponse.results;
 
         // Goals
         if (goalsRes.data && goalsRes.data.length > 0) {
@@ -189,6 +193,9 @@ const Index = () => {
         const answerMap: Record<string, string> = {};
         (answersRes.data ?? []).forEach((a: any) => { answerMap[a.question_id] = a.answer_text; });
         setPointBAnswers(answerMap);
+
+        // Tracking questions
+        setTrackingQuestions(trackingQRes.data ?? []);
       } catch (err) {
         console.error('Error loading data from external DB:', err);
       }
@@ -433,6 +440,7 @@ const Index = () => {
             diaryEntries={diaryEntries}
             onSaveDaily={handleSaveDaily}
             onSaveWeekly={handleSaveWeekly}
+            trackingQuestions={trackingQuestions}
           />
         )}
         {activeTab === 'protocols' && (

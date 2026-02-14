@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Sparkles, Target, BookOpen, X } from 'lucide-react';
-import { externalDb } from '@/lib/externalDb';
 import type { DiaryEntry } from '@/types/mentoring';
 
 interface TrackingQuestion {
@@ -16,38 +15,19 @@ interface TrackingTabProps {
   diaryEntries: DiaryEntry[];
   onSaveDaily: (form: { energy: number; text: string; intent: string }) => void;
   onSaveWeekly: (form: { achievements: string; lessons: string; nextStep: string }) => void;
+  trackingQuestions: TrackingQuestion[];
 }
 
-const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly }: TrackingTabProps) => {
+const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly, trackingQuestions }: TrackingTabProps) => {
   const [trackingMode, setTrackingMode] = useState<'daily' | 'weekly' | 'diary'>('daily');
-  const [dailyQuestions, setDailyQuestions] = useState<TrackingQuestion[]>([]);
-  const [weeklyQuestions, setWeeklyQuestions] = useState<TrackingQuestion[]>([]);
   const [dailyAnswers, setDailyAnswers] = useState<Record<string, string | number>>({});
   const [weeklyAnswers, setWeeklyAnswers] = useState<Record<string, string>>({});
   const [viewingEntry, setViewingEntry] = useState<DiaryEntry | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadQuestions();
-  }, [userId]);
-
-  const loadQuestions = async () => {
-    try {
-      const res = await externalDb.select('tracking_questions', {
-        filters: { user_id: userId },
-        order: { column: 'sort_order', ascending: true },
-      });
-      const questions = (res.data ?? []) as TrackingQuestion[];
-      setDailyQuestions(questions.filter(q => q.question_type === 'daily'));
-      setWeeklyQuestions(questions.filter(q => q.question_type === 'weekly'));
-    } catch (err) {
-      console.error('Error loading tracking questions:', err);
-    }
-    setLoading(false);
-  };
+  const dailyQuestions = trackingQuestions.filter(q => q.question_type === 'daily');
+  const weeklyQuestions = trackingQuestions.filter(q => q.question_type === 'weekly');
 
   const handleSaveDaily = () => {
-    // Collect answers into the expected format
     const textAnswers = Object.values(dailyAnswers).filter(v => typeof v === 'string').join('; ');
     const energy = Object.values(dailyAnswers).find(v => typeof v === 'number') as number || 5;
     onSaveDaily({ energy, text: textAnswers, intent: '' });
@@ -65,14 +45,6 @@ const TrackingTab = ({ userId, diaryEntries, onSaveDaily, onSaveWeekly }: Tracki
     setWeeklyAnswers({});
     setTrackingMode('diary');
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-10">
-        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   const noQuestions = dailyQuestions.length === 0 && weeklyQuestions.length === 0;
 
