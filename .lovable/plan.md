@@ -1,106 +1,87 @@
 
 
-## Диагностика: почему платформа зависает
+## План рефакторинга: устранение дублирования (DRY)
 
-Найдено **4 критические проблемы**:
+Приоритет от простого к сложному. Каждый шаг -- самостоятельная правка, не ломающая остальные.
 
-### 1. Edge-функция создаёт новое подключение к БД на КАЖДЫЙ запрос
+### Шаг 1. formatAmount -- вынести в утилиту (2 минуты)
 
-В `external-db/index.ts` функция `getPool()` вызывается внутри обработчика запроса. Это значит, что каждый HTTP-вызов создаёт новый TCP connection pool к внешнему PostgreSQL серверу. Установка TCP-соединения с удалённым сервером занимает 2-5 секунд, а если сервер в РФ и edge-функция в другом регионе -- до 10 секунд.
+Создать `src/lib/format.ts` с экспортом `formatAmount`. Удалить копии из `Index.tsx` и `DashboardTab.tsx`, заменить на импорт.
 
-**Исправление**: вынести создание пула на уровень модуля. В Deno Deploy (на котором работают backend-функции) модульный код сохраняется между вызовами на одном изоляте -- повторные запросы будут переиспользовать уже открытое соединение.
+### Шаг 2. Заменить все ручные модалки на ModalOverlay (15 минут)
 
-### 2. Нет таймаута на HTTP-запросы к backend-функции
+Компонент `ModalOverlay` уже существует и делает ровно то же самое, что и 10 скопированных блоков. Заменить все инлайн-модалки на `<ModalOverlay>`:
 
-В `externalDb.ts` функция `call()` использует обычный `fetch()` без `AbortController` и таймаута. Если edge-функция зависает (cold start, медленная БД), фронтенд ждёт бесконечно -- "вечная загрузка".
+- `Index.tsx`: Point A, Point B, Metric Picker (3 штуки)
+- `DashboardTab.tsx`: Steps Edit (1 штука)
+- `TrackingTab.tsx`: View Entry (1 штука)
+- `RoadmapsTab.tsx`: Roadmap Detail (1 штука)
+- `AdminClientView.tsx`: все 5 форм
 
-**Исправление**: добавить `AbortController` с таймаутом 30 секунд + автоматический retry (1 повторная попытка).
+Это уберёт примерно 100-150 строк дублированной разметки.
 
-### 3. Страница "Трекинг" делает ОТДЕЛЬНЫЙ запрос
+### Шаг 3. Компонент ScaleInput для шкалы 1-10 (5 минут)
 
-`TrackingTab` при каждом открытии вызывает `externalDb.select('tracking_questions')` -- это ещё один HTTP-вызов к edge-функции, ещё одно создание пула, ещё одно ожидание. При этом данные `tracking_questions` уже загружаются в batch-запросе Index.tsx (нет, на самом деле НЕ загружаются -- в batch есть `point_b_questions`, но нет `tracking_questions`).
+Создать `src/components/ScaleInput.tsx`:
 
-**Исправление**: включить `tracking_questions` в основной batch-запрос в `Index.tsx` и передавать вопросы в `TrackingTab` как props вместо отдельного запроса.
+```text
+ScaleInput
+  Props: value, onChange, activeColor?, columns?
+  Renders: grid of 1-10 buttons
+```
 
-### 4. Кнопка "Выйти" работает через раз
+Использовать в `TrackingTab` (2 места) и `Index.tsx` (вулканы).
 
-Функция `signOut` ожидает ответ от auth-сервера (`await supabase.auth.signOut()`). Если сеть медленная, кнопка выглядит "мёртвой". Нужно сначала очистить состояние (мгновенный UI-отклик), а потом делать серверный вызов.
+### Шаг 4. Утилита uploadFile (5 минут)
+
+Создать `src/lib/uploadFile.ts`:
+
+```text
+uploadFile(bucketPath: string, file: File) => Promise<string | null>
+  - Генерирует уникальный путь
+  - Загружает в storage
+  - Возвращает путь или null при ошибке
+```
+
+Заменить 7 копий загрузки файлов в `AdminClientView.tsx` и `ProtocolsTab.tsx`.
+
+### Шаг 5. Хелпер adminCrud для однотипных CRUD-операций (5 минут)
+
+Создать вспомогательную функцию в `AdminClientView.tsx`:
+
+```text
+adminAction(action, args, successMsg) => Promise
+  - Вызывает externalDb.admin[action]
+  - Показывает toast с successMsg
+  - Вызывает loadClientData
+  - При ошибке показывает toast с ошибкой
+```
+
+Это упростит 8-10 однотипных обработчиков delete/update/insert.
+
+## Итого
+
+| Что | Было | Станет | Экономия строк |
+|-----|------|--------|----------------|
+| formatAmount | 2 копии | 1 утилита | ~5 строк |
+| Модальные окна | 10 инлайн | 10 вызовов ModalOverlay | ~120 строк |
+| Шкала 1-10 | 3 копии | 1 компонент | ~40 строк |
+| Загрузка файлов | 7 копий | 1 утилита | ~35 строк |
+| CRUD-обработчики | 8 копий паттерна | 1 хелпер | ~40 строк |
+
+Общая экономия: примерно **240 строк** дублированного кода.
 
 ## Затронутые файлы
 
-### 1. `supabase/functions/external-db/index.ts`
-- Вынести `getPool()` на уровень модуля (lazy singleton)
-- Переиспользовать пул между запросами на одном изоляте
+**Новые файлы:**
+- `src/lib/format.ts`
+- `src/components/ScaleInput.tsx`
+- `src/lib/uploadFile.ts`
 
-### 2. `src/lib/externalDb.ts`
-- Добавить `AbortController` с таймаутом 30 секунд
-- Добавить 1 автоматический retry при ошибке
-- Улучшить обработку ошибок
-
-### 3. `src/pages/Index.tsx`
-- Добавить `tracking_questions` в batch-запрос (11-й запрос)
-- Передавать загруженные вопросы в `TrackingTab` через props
-
-### 4. `src/tabs/TrackingTab.tsx`
-- Убрать `useEffect` с отдельным `externalDb.select`
-- Принимать `trackingQuestions` через props
-- Убрать состояние `loading` (данные уже готовы от родителя)
-
-### 5. `src/hooks/useAuth.tsx`
-- В `signOut`: сначала очистить state (мгновенный UI), потом вызывать `supabase.auth.signOut()` в фоне
-
-## Технические детали
-
-### Singleton пул в edge-функции:
-```typescript
-let pool: Pool | null = null;
-function getPool() {
-  if (pool) return pool;
-  // ...создание пула...
-  pool = new Pool(...);
-  return pool;
-}
-```
-
-### Таймаут и retry в externalDb.ts:
-```typescript
-async function call(action, body, attempt = 0) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000);
-  try {
-    const res = await fetch(url, { signal: controller.signal, ... });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(...);
-    return res.json();
-  } catch (err) {
-    clearTimeout(timeout);
-    if (attempt < 1) return call(action, body, attempt + 1);
-    throw err;
-  }
-}
-```
-
-### Мгновенный signOut:
-```typescript
-const signOut = async () => {
-  setUser(null);
-  setSession(null);
-  setRole(null);
-  setProfileName(null);
-  // Фоновый вызов -- не блокирует UI
-  supabase.auth.signOut().catch(() => {});
-};
-```
-
-## Про РУ-зону
-
-Адаптация под РФ-зону не нужна на уровне кода. Проблема в том, что edge-функции работают в ближайшем к пользователю регионе, а внешний PostgreSQL сервер может быть далеко. Решение -- переиспользование соединений (пункт 1), что убирает повторный overhead на каждый запрос. Код уже полностью русифицирован и не зависит от региональных настроек браузера.
-
-## Ожидаемый результат
-
-- Первая загрузка: 3-5 секунд вместо 15-30+
-- Повторные загрузки (warm start): 1-2 секунды
-- Трекинг: загружается мгновенно (данные уже есть)
-- Выход: мгновенный отклик
-- При сбоях: автоматический retry вместо вечной загрузки
-
+**Изменяемые файлы:**
+- `src/pages/Index.tsx` -- убрать formatAmount, заменить 3 инлайн-модалки на ModalOverlay, заменить шкалу вулканов на ScaleInput
+- `src/tabs/DashboardTab.tsx` -- убрать formatAmount, заменить инлайн-модалку
+- `src/tabs/TrackingTab.tsx` -- заменить инлайн-модалку, заменить 2 шкалы на ScaleInput
+- `src/tabs/RoadmapsTab.tsx` -- заменить инлайн-модалку
+- `src/tabs/ProtocolsTab.tsx` -- использовать uploadFile
+- `src/pages/admin/AdminClientView.tsx` -- заменить 5 инлайн-модалок, использовать uploadFile, использовать adminAction хелпер
