@@ -1,29 +1,62 @@
 import { supabase } from '@/integrations/supabase/client';
 
 const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/external-db`;
+const TOKEN_MARGIN_SEC = 60;
 
-async function getHeaders() {
+async function getFreshToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) {
+    console.warn('[externalDb] No session found');
+    return '';
+  }
+
+  // Check if token is expired or about to expire
+  const now = Math.floor(Date.now() / 1000);
+  if (session.expires_at && session.expires_at - now < TOKEN_MARGIN_SEC) {
+    console.warn('[externalDb] Token expired or expiring soon, refreshing...');
+    const { data: refreshed, error } = await supabase.auth.refreshSession();
+    if (error || !refreshed.session) {
+      console.warn('[externalDb] Refresh failed, using old token', error?.message);
+      return session.access_token;
+    }
+    return refreshed.session.access_token;
+  }
+
+  return session.access_token;
+}
+
+function buildHeaders(token: string) {
   return {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${session?.access_token || ''}`,
+    'Authorization': `Bearer ${token}`,
     'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
   };
 }
 
-async function call(action: string, body: Record<string, any> = {}, attempt = 0): Promise<any> {
-  const headers = await getHeaders();
+async function call(action: string, body: Record<string, any> = {}, _retried401 = false): Promise<any> {
+  const token = await getFreshToken();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
     const res = await fetch(`${FUNCTION_URL}?action=${action}`, {
       method: 'POST',
-      headers,
+      headers: buildHeaders(token),
       body: JSON.stringify(body),
       signal: controller.signal,
     });
     clearTimeout(timeout);
+
+    // Smart 401 retry: force refresh and try once more
+    if (res.status === 401 && !_retried401) {
+      console.warn(`[externalDb] 401 on ${action}, forcing token refresh and retrying...`);
+      const { data: refreshed, error } = await supabase.auth.refreshSession();
+      if (!error && refreshed.session) {
+        return call(action, body, true);
+      }
+      throw new Error('Session expired — please sign in again');
+    }
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -33,9 +66,10 @@ async function call(action: string, body: Record<string, any> = {}, attempt = 0)
     return res.json();
   } catch (err) {
     clearTimeout(timeout);
-    if (attempt < 1) {
-      console.warn(`Retrying ${action} (attempt ${attempt + 1})...`);
-      return call(action, body, attempt + 1);
+    // Network/timeout retry (once), but not if we already retried for 401
+    if (!_retried401 && err instanceof DOMException && err.name === 'AbortError') {
+      console.warn(`[externalDb] Timeout on ${action}, retrying...`);
+      return call(action, body, true);
     }
     throw err;
   }
