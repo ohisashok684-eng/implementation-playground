@@ -1,67 +1,75 @@
 
 
-## Alternative Solution: Server-Side Signed URLs
+## Замена загрузки файлов на URL-ссылки (протоколы + дорожные карты + сессии)
 
-### Why Previous Fixes Failed
+### Суть
 
-All previous attempts tried to fix the client-side token management, but the root problem is deeper: the Supabase JS client's auth state machine becomes unstable when `refreshSession()` is called during concurrent or rapid sequential operations. This causes `createSignedUrl()` to hang indefinitely on subsequent calls.
+Во всех трёх сущностях (протоколы, дорожные карты, сессии) заменяем загрузку файлов через Storage на ввод URL-ссылок (Google Docs, Notion и т.д.). Пользователь при нажатии "Открыть" просто переходит по ссылке -- мгновенно, без signed URL, без about:blank.
 
-### New Approach
+---
 
-Move signed URL generation to a backend function that uses the service role key. This completely bypasses:
-- Client-side token refresh issues
-- Storage RLS policy checks
-- GoTrue auth state machine conflicts
+### Изменения по файлам
 
-The client simply calls the function with the file path and gets back a ready-to-use URL.
+#### 1. `src/pages/admin/AdminClientView.tsx` -- админ-панель (основной объём работы)
 
-### Implementation
+**Сессии:**
+- Убрать `import { uploadFile }` и `fileInputRef`
+- Форма сессии: заменить `files: [] as File[]` на `file_urls: [] as string[]` (массив ссылок)
+- В модальном окне создания/редактирования: заменить `<input type="file">` + список файлов на текстовые поля для ввода URL + кнопка "Добавить ссылку"
+- В `handleSaveSession`: убрать цикл загрузки файлов через `uploadFile`, сохранять `file_urls` напрямую в БД (поле `files` -- это массив строк, теперь там будут URL вместо путей storage)
+- В списке сессий (строки 571-605): убрать инлайн-загрузку файла через `<label>/<input type="file">`, заменить кнопки открытия файлов -- вместо `supabase.storage.createSignedUrl` делать `window.open(url, '_blank')`
 
-#### 1. New backend function: `supabase/functions/get-signed-url/index.ts`
+**Протоколы:**
+- Убрать `fileInputRef`
+- Форма протокола: заменить `file: null as File | null` на `file_url: ''` (строка URL)
+- В модальном окне: заменить `<input type="file">` на текстовое поле URL
+- В `handleSaveProtocol`: убрать вызов `uploadFile`, сохранять `file_url` напрямую
 
-A lightweight function that:
-- Accepts `{ filePath: string }` in the request body
-- Verifies the user is authenticated (checks JWT from Authorization header)
-- Checks if the user is either a super_admin OR the file belongs to them (matches folder structure)
-- Uses the service role key to call `storage.createSignedUrl()` -- this never fails due to token issues
-- Returns `{ url: "..." }` or `{ error: "..." }`
+**Дорожные карты:**
+- Убрать `roadmapFileInputRef` и функцию `handleUploadRoadmapFile`
+- Форма: заменить `file: null as File | null` на `file_url: ''`
+- В модальном окне: заменить `<input type="file">` на текстовое поле URL
+- В `handleSaveRoadmap`: убрать `uploadFile`, сохранять `file_url` напрямую
+- В списке карт (строки 756-769): убрать инлайн-загрузку, заменить кнопку открытия файла на `window.open(r.file_url, '_blank')`
 
-#### 2. Simplified `src/lib/openFile.ts`
+#### 2. `src/tabs/ProtocolsTab.tsx` -- пользовательский интерфейс протоколов
 
-Replace the entire `tryCreateSignedUrl` + retry + refresh logic with a single `fetch()` call to the new function:
+- Убрать `import { uploadFile }` и `import { openStorageFile }`
+- Убрать `fileInputRef`, `newFile` из state
+- Кнопка "Открыть файл": вместо `openStorageFile(p.fileUrl)` делать `window.open(p.fileUrl, '_blank')`
+- В модальном окне редактирования: заменить `<input type="file">` и кнопку загрузки на текстовое поле URL
+- В `handleSave`: убрать логику `uploadFile`, сохранять URL напрямую
 
-```
-1. window.open('', '_blank') -- synchronous, bypass popup blockers
-2. Write loading page into window
-3. fetch('/functions/v1/get-signed-url', { filePath }) -- one simple call
-4. If success: newWindow.location.href = url
-5. If error: writeErrorToWindow(message)
-```
+#### 3. `src/tabs/RoadmapsTab.tsx` -- пользовательский интерфейс дорожных карт
 
-No more `supabase.storage` calls from the client. No more `refreshSession()`. No more retry logic. Just one fetch call with the existing auth token (passed via Authorization header).
+- Убрать `import { openStorageFile }`
+- Кнопка "Открыть файл": вместо `openStorageFile(rm.fileUrl)` делать `window.open(rm.fileUrl, '_blank')`
 
-### Technical Details
+#### 4. `src/tabs/DashboardTab.tsx` -- пользовательский интерфейс сессий
 
-**Backend function (`supabase/functions/get-signed-url/index.ts`):**
-- Uses `createClient` with `SUPABASE_SERVICE_ROLE_KEY` for storage access
-- Extracts user from JWT to verify authentication
-- Generates signed URL with 1-hour expiry
-- CORS headers for cross-origin requests
+- Убрать `import { openStorageFile }`
+- Кнопки "Открыть файл" в сессиях (строки 222-235): вместо `openStorageFile(f)` делать `window.open(f, '_blank')`
 
-**Client (`src/lib/openFile.ts`):**
-- Gets current session token via `supabase.auth.getSession()` (read-only, no mutation)
-- Single fetch to the edge function
-- No retry needed -- service role key never has token issues
-- Keeps `writeLoadingToWindow` and `writeErrorToWindow` for UX
+#### 5. `src/types/mentoring.ts` -- типы
 
-### Files to Change
+- В `Session`: поле `files: string[]` остаётся без изменений (теперь хранит URL вместо путей)
+- В `Protocol`: поле `fileUrl?: string` остаётся без изменений (теперь хранит URL)
 
-- **Create** `supabase/functions/get-signed-url/index.ts` -- new backend function
-- **Edit** `src/lib/openFile.ts` -- simplify to use the new function instead of client-side storage API
+---
 
-### Result
+### Что НЕ меняется
 
-- All files open instantly, every time -- no more hanging requests
-- No dependency on client-side token state
-- No `refreshSession()` conflicts
-- Loading and error feedback preserved in the opened window
+- Схема базы данных -- колонки `file_url` (TEXT) и `files` (TEXT[]) уже существуют и подходят для хранения URL
+- `src/lib/openFile.ts` и `src/lib/uploadFile.ts` -- можно оставить как есть (перестанут использоваться для этих сущностей, но не сломают ничего)
+- Типы в `src/types/mentoring.ts` -- семантика полей меняется, но типы остаются теми же
+
+### Валидация URL
+
+При вводе URL в админке -- простая проверка что строка начинается с `http://` или `https://`. Если нет -- показывать подсказку.
+
+### Результат
+
+- Все файлы (протоколы, дорожные карты, сессии) открываются мгновенно через `window.open(url, '_blank')`
+- Никаких signed URL, никаких токенов, никаких about:blank
+- Админ просто вставляет ссылку на Google Docs / Notion / любой другой ресурс
+
