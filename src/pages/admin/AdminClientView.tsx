@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Upload, Check, Edit2, MessageSquare, Rocket } from 'lucide-react';
+import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Link, Check, Edit2, MessageSquare, Rocket } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
-import { uploadFile } from '@/lib/uploadFile';
+
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import ModalOverlay from '@/components/ModalOverlay';
@@ -12,8 +12,6 @@ const AdminClientView = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const roadmapFileInputRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<any>(null);
   const [goals, setGoals] = useState<any[]>([]);
@@ -42,17 +40,17 @@ const AdminClientView = () => {
 
   // Session form
   const [sessionForm, setSessionForm] = useState({
-    session_number: 1, session_date: '', session_time: '', summary: '', steps: [''], files: [] as File[]
+    session_number: 1, session_date: '', session_time: '', summary: '', steps: [''], file_urls: [] as string[]
   });
 
   // Protocol form
   const [protocolForm, setProtocolForm] = useState({
-    title: '', description: '', color: 'amber', file: null as File | null
+    title: '', description: '', color: 'amber', file_url: ''
   });
 
   // Roadmap form
   const [roadmapForm, setRoadmapForm] = useState({
-    title: '', description: '', status: 'В работе', steps: [''] as string[], file: null as File | null
+    title: '', description: '', status: 'В работе', steps: [''] as string[], file_url: ''
   });
 
   // Question form
@@ -120,7 +118,7 @@ const AdminClientView = () => {
       session_time: s.session_time,
       summary: s.summary || '',
       steps: s.steps?.length > 0 ? [...s.steps] : [''],
-      files: [],
+      file_urls: [],
     });
     setShowSessionForm(true);
   };
@@ -128,23 +126,26 @@ const AdminClientView = () => {
   const openCreateSession = () => {
     setEditingSessionId(null);
     const maxNum = sessions.reduce((max: number, s: any) => Math.max(max, s.session_number), 0);
-    setSessionForm({ session_number: maxNum + 1, session_date: '', session_time: '', summary: '', steps: [''], files: [] });
+    setSessionForm({ session_number: maxNum + 1, session_date: '', session_time: '', summary: '', steps: [''], file_urls: [] });
     setShowSessionForm(true);
   };
+
+  const isValidUrl = (url: string) => !url || url.startsWith('http://') || url.startsWith('https://');
 
   const handleSaveSession = async () => {
     if (!userId) return;
 
-    // Upload new files
-    const filePaths: string[] = [];
-    for (const file of sessionForm.files) {
-      const path = await uploadFile(`${userId}/sessions`, file);
-      if (path) filePaths.push(path);
+    // Validate URLs
+    const validUrls = sessionForm.file_urls.filter(u => u.trim());
+    for (const url of validUrls) {
+      if (!isValidUrl(url)) {
+        toast({ title: 'Ошибка', description: 'Все ссылки должны начинаться с http:// или https://', variant: 'destructive' });
+        return;
+      }
     }
 
     try {
       if (editingSessionId) {
-        // Update existing session
         const existingSession = sessions.find(s => s.id === editingSessionId);
         const existingFiles = existingSession?.files || [];
         await externalDb.admin.update('sessions', {
@@ -153,11 +154,10 @@ const AdminClientView = () => {
           session_time: sessionForm.session_time,
           summary: sessionForm.summary,
           steps: sessionForm.steps.filter(s => s.trim()),
-          files: [...existingFiles, ...filePaths],
+          files: [...existingFiles, ...validUrls],
         }, { id: editingSessionId });
         toast({ title: 'Сессия обновлена' });
       } else {
-        // Create new session
         await externalDb.admin.insert('sessions', {
           user_id: userId,
           session_number: sessionForm.session_number,
@@ -165,13 +165,13 @@ const AdminClientView = () => {
           session_time: sessionForm.session_time,
           summary: sessionForm.summary,
           steps: sessionForm.steps.filter(s => s.trim()),
-          files: filePaths,
+          files: validUrls,
         });
         toast({ title: 'Сессия добавлена' });
       }
       setShowSessionForm(false);
       setEditingSessionId(null);
-      setSessionForm(prev => ({ ...prev, files: [] }));
+      setSessionForm(prev => ({ ...prev, file_urls: [] }));
       loadClientData(userId);
     } catch (error: any) {
       toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
@@ -185,44 +185,33 @@ const AdminClientView = () => {
       title: p.title,
       description: p.description || '',
       color: p.color || 'amber',
-      file: null,
+      file_url: p.file_url || '',
     });
     setShowProtocolForm(true);
   };
 
   const openCreateProtocol = () => {
     setEditingProtocolId(null);
-    setProtocolForm({ title: '', description: '', color: 'amber', file: null });
+    setProtocolForm({ title: '', description: '', color: 'amber', file_url: '' });
     setShowProtocolForm(true);
   };
 
   const handleSaveProtocol = async () => {
     if (!userId) return;
-    let fileUrl: string | null = null;
-    let fileName = '';
 
-    if (protocolForm.file) {
-      const path = await uploadFile(`${userId}/protocols`, protocolForm.file);
-      if (!path) {
-        toast({ title: 'Ошибка загрузки файла', variant: 'destructive' });
-        return;
-      }
-      fileUrl = path;
-      fileName = protocolForm.file.name;
+    if (protocolForm.file_url && !isValidUrl(protocolForm.file_url)) {
+      toast({ title: 'Ошибка', description: 'Ссылка должна начинаться с http:// или https://', variant: 'destructive' });
+      return;
     }
 
     try {
       if (editingProtocolId) {
-        const updates: any = {
+        await externalDb.admin.update('protocols', {
           title: protocolForm.title,
           description: protocolForm.description,
           color: protocolForm.color,
-        };
-        if (fileUrl) {
-          updates.file_url = fileUrl;
-          updates.file_name = fileName;
-        }
-        await externalDb.admin.update('protocols', updates, { id: editingProtocolId });
+          file_url: protocolForm.file_url || null,
+        }, { id: editingProtocolId });
         toast({ title: 'Протокол обновлён' });
       } else {
         await externalDb.admin.insert('protocols', {
@@ -230,14 +219,13 @@ const AdminClientView = () => {
           title: protocolForm.title,
           description: protocolForm.description,
           color: protocolForm.color,
-          file_name: fileName,
-          file_url: fileUrl,
+          file_url: protocolForm.file_url || null,
         });
         toast({ title: 'Протокол добавлен' });
       }
       setShowProtocolForm(false);
       setEditingProtocolId(null);
-      setProtocolForm({ title: '', description: '', color: 'amber', file: null });
+      setProtocolForm({ title: '', description: '', color: 'amber', file_url: '' });
       loadClientData(userId);
     } catch (error: any) {
       toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
@@ -252,40 +240,33 @@ const AdminClientView = () => {
       description: r.description || '',
       status: r.status || 'В работе',
       steps: [''],
-      file: null,
+      file_url: r.file_url || '',
     });
     setShowRoadmapForm(true);
   };
 
   const openCreateRoadmap = () => {
     setEditingRoadmapId(null);
-    setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''], file: null });
+    setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''], file_url: '' });
     setShowRoadmapForm(true);
   };
 
   const handleSaveRoadmap = async () => {
     if (!userId) return;
 
-    // Upload file if provided
-    let fileUrl: string | null = null;
-    if (roadmapForm.file) {
-      const path = await uploadFile(`${userId}/roadmaps`, roadmapForm.file);
-      if (!path) {
-        toast({ title: 'Ошибка загрузки файла', variant: 'destructive' });
-        return;
-      }
-      fileUrl = path;
+    if (roadmapForm.file_url && !isValidUrl(roadmapForm.file_url)) {
+      toast({ title: 'Ошибка', description: 'Ссылка должна начинаться с http:// или https://', variant: 'destructive' });
+      return;
     }
 
     try {
       if (editingRoadmapId) {
-        const updates: any = {
+        await externalDb.admin.update('roadmaps', {
           title: roadmapForm.title,
           description: roadmapForm.description,
           status: roadmapForm.status,
-        };
-        if (fileUrl) updates.file_url = fileUrl;
-        await externalDb.admin.update('roadmaps', updates, { id: editingRoadmapId });
+          file_url: roadmapForm.file_url || null,
+        }, { id: editingRoadmapId });
         toast({ title: 'Дорожная карта обновлена' });
       } else {
         const res = await externalDb.admin.insert('roadmaps', {
@@ -293,7 +274,7 @@ const AdminClientView = () => {
           title: roadmapForm.title,
           description: roadmapForm.description,
           status: roadmapForm.status,
-          file_url: fileUrl,
+          file_url: roadmapForm.file_url || null,
         });
 
         // Insert steps
@@ -311,7 +292,7 @@ const AdminClientView = () => {
       }
       setShowRoadmapForm(false);
       setEditingRoadmapId(null);
-      setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''], file: null });
+      setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''], file_url: '' });
       loadClientData(userId!);
     } catch (error: any) {
       toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
@@ -350,20 +331,6 @@ const AdminClientView = () => {
     }
   };
 
-  const handleUploadRoadmapFile = async (roadmapId: string, file: File) => {
-    const path = await uploadFile(`${userId}/roadmaps`, file);
-    if (!path) {
-      toast({ title: 'Ошибка загрузки', variant: 'destructive' });
-      return;
-    }
-    try {
-      await externalDb.admin.update('roadmaps', { file_url: path }, { id: roadmapId });
-      toast({ title: 'Файл загружен' });
-      loadClientData(userId!);
-    } catch (err) {
-      console.error('Failed to update roadmap file:', err);
-    }
-  };
 
   // === TRACKING QUESTIONS ===
   const handleSaveQuestion = async () => {
@@ -570,39 +537,13 @@ const AdminClientView = () => {
               )}
               {s.files?.length > 0 && (
                 <div className="space-y-1 pt-1">
-                  {s.files.map((filePath: string, i: number) => (
-                    <button key={i} onClick={async () => {
-                      const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(filePath, 3600);
-                      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                    }} className="text-[10px] text-secondary font-medium underline block cursor-pointer bg-transparent border-none p-0">
-                      📎 Файл {i + 1}
+                  {s.files.map((fileUrl: string, i: number) => (
+                    <button key={i} onClick={() => window.open(fileUrl, '_blank')} className="text-[10px] text-secondary font-medium underline block cursor-pointer bg-transparent border-none p-0">
+                      🔗 Ссылка {i + 1}
                     </button>
                   ))}
                 </div>
               )}
-              <label className="cursor-pointer inline-flex items-center space-x-1 text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80 transition-colors pt-1">
-                <Upload size={12} />
-                <span>Загрузить файл</span>
-                <input type="file" className="hidden" onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file || !userId) return;
-                  const ext = file.name.split('.').pop();
-                  const path = `${userId}/sessions/${s.id}/${Date.now()}.${ext}`;
-                  const { error: upErr } = await supabase.storage.from('mentoring-files').upload(path, file);
-                  if (upErr) {
-                    toast({ title: 'Ошибка загрузки', description: upErr.message, variant: 'destructive' });
-                    return;
-                  }
-                  const currentFiles = s.files || [];
-                  try {
-                    await externalDb.admin.update('sessions', { files: [...currentFiles, path] }, { id: s.id });
-                    toast({ title: 'Файл загружен' });
-                    loadClientData(userId);
-                  } catch (err) {
-                    console.error('Failed to update session files:', err);
-                  }
-                }} />
-              </label>
             </div>
           ))
         )}
@@ -645,32 +586,29 @@ const AdminClientView = () => {
           <button onClick={() => setSessionForm({...sessionForm, steps: [...sessionForm.steps, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Ещё шаг</button>
         </div>
         <div className="space-y-2">
-          <p className="label-tiny">Файлы</p>
+          <p className="label-tiny">Ссылки на файлы</p>
           {editingSessionId && (() => {
             const existingSession = sessions.find(s => s.id === editingSessionId);
             const existingFiles = existingSession?.files || [];
             if (existingFiles.length === 0) return null;
             return (
               <div className="space-y-1">
-                {existingFiles.map((filePath: string, i: number) => (
+                {existingFiles.map((url: string, i: number) => (
                   <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-xl">
-                    <span className="text-[10px] text-foreground font-medium truncate">📎 Файл {i + 1} (загружен)</span>
+                    <span className="text-[10px] text-foreground font-medium truncate">🔗 {url}</span>
                   </div>
                 ))}
               </div>
             );
           })()}
-          {sessionForm.files.map((f, i) => (
-            <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-xl">
-              <span className="text-[10px] text-foreground font-medium truncate">📎 {f.name}</span>
-              <button onClick={() => setSessionForm({...sessionForm, files: sessionForm.files.filter((_, j) => j !== i)})} className="text-destructive p-1"><Trash2 size={12} /></button>
+          {sessionForm.file_urls.map((url, i) => (
+            <div key={i} className="flex items-center space-x-2">
+              <Link size={14} className="text-muted-foreground shrink-0" />
+              <input value={url} onChange={e => { const urls = [...sessionForm.file_urls]; urls[i] = e.target.value; setSessionForm({...sessionForm, file_urls: urls}); }} className="input-glass flex-1 text-xs" placeholder="https://docs.google.com/..." />
+              <button onClick={() => setSessionForm({...sessionForm, file_urls: sessionForm.file_urls.filter((_, j) => j !== i)})} className="text-destructive p-1"><Trash2 size={12} /></button>
             </div>
           ))}
-          <label className="cursor-pointer inline-flex items-center space-x-1 text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80 transition-colors">
-            <Upload size={12} />
-            <span>Добавить файл</span>
-            <input type="file" className="hidden" onChange={e => { if (e.target.files?.[0]) setSessionForm({...sessionForm, files: [...sessionForm.files, e.target.files[0]]}); e.target.value = ''; }} />
-          </label>
+          <button onClick={() => setSessionForm({...sessionForm, file_urls: [...sessionForm.file_urls, '']})} className="text-[10px] font-bold text-secondary uppercase tracking-wider">+ Добавить ссылку</button>
         </div>
         <button onClick={handleSaveSession} className="w-full py-4 btn-dark">{editingSessionId ? 'Сохранить изменения' : 'Сохранить сессию'}</button>
       </ModalOverlay>
@@ -690,8 +628,8 @@ const AdminClientView = () => {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">{p.description}</p>
-              {p.file_name && (
-                <p className="text-[10px] text-secondary font-medium">📎 {p.file_name}</p>
+              {p.file_url && (
+                <p className="text-[10px] text-secondary font-medium">🔗 Ссылка прикреплена</p>
               )}
             </div>
           ))
@@ -724,14 +662,14 @@ const AdminClientView = () => {
           </div>
         </div>
         <div className="space-y-1">
-          <p className="label-tiny">Файл</p>
-          <input type="file" ref={fileInputRef} onChange={e => setProtocolForm({...protocolForm, file: e.target.files?.[0] || null})} className="text-xs" />
-          {protocolForm.file && <p className="text-[10px] text-secondary font-medium">📎 {protocolForm.file.name}</p>}
-          {editingProtocolId && !protocolForm.file && (() => {
-            const existing = protocols.find(p => p.id === editingProtocolId);
-            if (existing?.file_name) return <p className="text-[10px] text-muted-foreground">Текущий файл: 📎 {existing.file_name}</p>;
-            return null;
-          })()}
+          <p className="label-tiny">Ссылка на файл</p>
+          <div className="flex items-center space-x-2">
+            <Link size={14} className="text-muted-foreground shrink-0" />
+            <input type="url" value={protocolForm.file_url} onChange={e => setProtocolForm({...protocolForm, file_url: e.target.value})} className="input-glass flex-1 text-xs" placeholder="https://docs.google.com/..." />
+          </div>
+          {protocolForm.file_url && !isValidUrl(protocolForm.file_url) && (
+            <p className="text-[10px] text-destructive">Ссылка должна начинаться с http:// или https://</p>
+          )}
         </div>
         <button onClick={handleSaveProtocol} className="w-full py-4 btn-dark">{editingProtocolId ? 'Сохранить изменения' : 'Сохранить протокол'}</button>
       </ModalOverlay>
@@ -753,21 +691,12 @@ const AdminClientView = () => {
               </div>
               <p className="text-xs text-muted-foreground">{r.description}</p>
 
-              {/* File upload */}
-              <div className="flex items-center space-x-2">
-              {r.file_url ? (
-                  <button onClick={async () => {
-                    const { data } = await supabase.storage.from('mentoring-files').createSignedUrl(r.file_url, 3600);
-                    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                  }} className="text-[10px] text-secondary font-medium underline bg-transparent border-none p-0 cursor-pointer">📎 Файл дорожной карты</button>
-                ) : (
-                  <span className="text-[10px] text-muted-foreground">Файл не загружен</span>
-                )}
-                <label className="cursor-pointer text-[10px] font-bold text-secondary uppercase tracking-wider hover:text-secondary/80">
-                  <Upload size={12} className="inline mr-1" />Загрузить
-                  <input type="file" className="hidden" onChange={e => { if (e.target.files?.[0]) handleUploadRoadmapFile(r.id, e.target.files[0]); }} />
-                </label>
-              </div>
+              {/* File link */}
+              {r.file_url && (
+                <button onClick={() => window.open(r.file_url, '_blank')} className="text-[10px] text-secondary font-medium underline bg-transparent border-none p-0 cursor-pointer">
+                  🔗 Открыть файл дорожной карты
+                </button>
+              )}
 
               {/* Steps */}
               <div className="space-y-2">
@@ -821,14 +750,14 @@ const AdminClientView = () => {
           </select>
         </div>
         <div className="space-y-1">
-          <p className="label-tiny">Файл дорожной карты</p>
-          <input type="file" onChange={e => setRoadmapForm({...roadmapForm, file: e.target.files?.[0] || null})} className="text-xs" />
-          {roadmapForm.file && <p className="text-[10px] text-secondary font-medium">📎 {roadmapForm.file.name}</p>}
-          {editingRoadmapId && !roadmapForm.file && (() => {
-            const existing = roadmaps.find(r => r.id === editingRoadmapId);
-            if (existing?.file_url) return <p className="text-[10px] text-muted-foreground">Текущий файл загружен ✓</p>;
-            return null;
-          })()}
+          <p className="label-tiny">Ссылка на файл</p>
+          <div className="flex items-center space-x-2">
+            <Link size={14} className="text-muted-foreground shrink-0" />
+            <input type="url" value={roadmapForm.file_url} onChange={e => setRoadmapForm({...roadmapForm, file_url: e.target.value})} className="input-glass flex-1 text-xs" placeholder="https://docs.google.com/..." />
+          </div>
+          {roadmapForm.file_url && !isValidUrl(roadmapForm.file_url) && (
+            <p className="text-[10px] text-destructive">Ссылка должна начинаться с http:// или https://</p>
+          )}
         </div>
         {!editingRoadmapId && (
           <div className="space-y-2">

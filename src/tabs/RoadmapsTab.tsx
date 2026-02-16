@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, Circle, Trash2, Plus, Pencil, ExternalLink } from 'lucide-react';
 import { externalDb } from '@/lib/externalDb';
-import { openStorageFile } from '@/lib/openFile';
+
 import ModalOverlay from '@/components/ModalOverlay';
 import type { Roadmap } from '@/types/mentoring';
 
@@ -136,7 +136,7 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
           </div>
           {rm.fileUrl ? (
             <button
-              onClick={() => openStorageFile(rm.fileUrl!)}
+              onClick={() => window.open(rm.fileUrl!, '_blank')}
               className="w-full flex items-center justify-center space-x-2 py-4 rounded-2xl text-[11px] font-bold uppercase tracking-widest active:scale-95 transition-transform shadow-lg bg-foreground text-white"
             >
               <ExternalLink size={14} />
