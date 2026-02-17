@@ -460,7 +460,8 @@ Deno.serve(async (req) => {
         // ===== INSERT =====
         case "insert": {
           const { table, data: insertData } = body;
-          const row = { ...insertData, user_id: userId };
+          const tablesWithoutUserId = ["roadmap_steps"];
+          const row = tablesWithoutUserId.includes(table) ? { ...insertData } : { ...insertData, user_id: userId };
           const cols = Object.keys(row);
           const vals = Object.values(row);
           const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
