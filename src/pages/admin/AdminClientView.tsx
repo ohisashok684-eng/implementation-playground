@@ -512,8 +512,7 @@ const AdminClientView = () => {
                   setRouteInfo((prev: any) => ({ ...prev, start_date: val }));
                   try {
                     await externalDb.admin.upsert('route_info', { user_id: userId, start_date: val }, 'user_id');
-                    toast({ title: 'Дата сохранена' });
-                  } catch { toast({ title: 'Ошибка', variant: 'destructive' }); }
+                  } catch { /* silent */ }
                 }}
                 className="input-glass text-xs"
               />
@@ -528,8 +527,7 @@ const AdminClientView = () => {
                   setRouteInfo((prev: any) => ({ ...prev, time_weeks: val }));
                   try {
                     await externalDb.admin.upsert('route_info', { user_id: userId, time_weeks: val }, 'user_id');
-                    toast({ title: 'Сохранено' });
-                  } catch { toast({ title: 'Ошибка', variant: 'destructive' }); }
+                  } catch { /* silent */ }
                 }}
                 className="input-glass text-center"
               />
@@ -544,8 +542,7 @@ const AdminClientView = () => {
                   setRouteInfo((prev: any) => ({ ...prev, sessions_total: val }));
                   try {
                     await externalDb.admin.upsert('route_info', { user_id: userId, sessions_total: val }, 'user_id');
-                    toast({ title: 'Сохранено' });
-                  } catch { toast({ title: 'Ошибка', variant: 'destructive' }); }
+                  } catch { /* silent */ }
                 }}
                 className="input-glass text-center"
               />
