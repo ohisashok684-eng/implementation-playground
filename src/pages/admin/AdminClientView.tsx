@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Link, Check, Edit2, MessageSquare, Rocket } from 'lucide-react';
+import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Link, Check, Edit2, MessageSquare, Rocket, Calendar, Clock, Hash } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
 
@@ -23,7 +23,8 @@ const AdminClientView = () => {
   const [metrics, setMetrics] = useState<any[]>([]);
   const [trackingQuestions, setTrackingQuestions] = useState<any[]>([]);
   const [pointBQuestions, setPointBQuestions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+   const [loading, setLoading] = useState(true);
+   const [routeInfo, setRouteInfo] = useState<any>(null);
 
   // Modal states
   const [showSessionForm, setShowSessionForm] = useState(false);
@@ -75,7 +76,7 @@ const AdminClientView = () => {
 
   const loadClientData = async (uid: string) => {
     try {
-      const [profileRes, goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes, pbQuestionsRes] = await Promise.all([
+      const [profileRes, goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes, pbQuestionsRes, routeRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
         externalDb.admin.select('goals', { filters: { user_id: uid }, order: { column: 'created_at' } }),
         externalDb.admin.select('roadmaps', { filters: { user_id: uid }, order: { column: 'created_at' }, withSteps: true }),
@@ -86,6 +87,7 @@ const AdminClientView = () => {
         externalDb.admin.select('progress_metrics', { filters: { user_id: uid } }),
         externalDb.admin.select('tracking_questions', { filters: { user_id: uid }, order: { column: 'sort_order' } }),
         externalDb.admin.select('point_b_questions', { filters: { user_id: uid }, order: { column: 'sort_order' } }),
+        externalDb.admin.select('route_info', { filters: { user_id: uid } }),
       ]);
 
       setProfile(profileRes.data || null);
@@ -98,6 +100,7 @@ const AdminClientView = () => {
       setMetrics(metricsRes.data ?? []);
       setTrackingQuestions(questionsRes.data ?? []);
       setPointBQuestions(pbQuestionsRes.data ?? []);
+      setRouteInfo(routeRes.data?.[0] ?? null);
       setLoading(false);
 
       // Pre-fill session number
@@ -494,6 +497,62 @@ const AdminClientView = () => {
           <p className="text-xs text-muted-foreground">{profile.email}</p>
         </div>
       </div>
+
+      {/* ========== MENTORING INFO ========== */}
+      <Section title="Менторство" icon={Calendar}>
+        <div className="glass card-round p-4 space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <p className="label-tiny">Дата начала</p>
+              <input
+                type="date"
+                value={routeInfo?.start_date || ''}
+                onChange={async (e) => {
+                  const val = e.target.value;
+                  setRouteInfo((prev: any) => ({ ...prev, start_date: val }));
+                  try {
+                    await externalDb.admin.upsert('route_info', { user_id: userId, start_date: val }, 'user_id');
+                    toast({ title: 'Дата сохранена' });
+                  } catch { toast({ title: 'Ошибка', variant: 'destructive' }); }
+                }}
+                className="input-glass text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="label-tiny">Недель</p>
+              <input
+                type="number"
+                value={routeInfo?.time_weeks ?? 12}
+                onChange={async (e) => {
+                  const val = +e.target.value;
+                  setRouteInfo((prev: any) => ({ ...prev, time_weeks: val }));
+                  try {
+                    await externalDb.admin.upsert('route_info', { user_id: userId, time_weeks: val }, 'user_id');
+                    toast({ title: 'Сохранено' });
+                  } catch { toast({ title: 'Ошибка', variant: 'destructive' }); }
+                }}
+                className="input-glass text-center"
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="label-tiny">Сессий</p>
+              <input
+                type="number"
+                value={routeInfo?.sessions_total ?? 8}
+                onChange={async (e) => {
+                  const val = +e.target.value;
+                  setRouteInfo((prev: any) => ({ ...prev, sessions_total: val }));
+                  try {
+                    await externalDb.admin.upsert('route_info', { user_id: userId, sessions_total: val }, 'user_id');
+                    toast({ title: 'Сохранено' });
+                  } catch { toast({ title: 'Ошибка', variant: 'destructive' }); }
+                }}
+                className="input-glass text-center"
+              />
+            </div>
+          </div>
+        </div>
+      </Section>
 
       {/* ========== GOALS (read-only) ========== */}
       <Section title="Цели клиента" icon={Target}>
