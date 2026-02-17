@@ -534,21 +534,11 @@ const Index = () => {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <p className="label-tiny">Сессии</p>
-              <input
-                type="number"
-                value={tempRoute.sessionsTotal}
-                onChange={(e) => setTempRoute({ ...tempRoute, sessionsTotal: parseInt(e.target.value) || 0 })}
-                className="input-glass font-bold"
-              />
+              <p className="text-lg font-black text-foreground">{routeInfo.sessionsTotal}</p>
             </div>
             <div className="space-y-2">
               <p className="label-tiny">Недель</p>
-              <input
-                type="number"
-                value={tempRoute.timeWeeks}
-                onChange={(e) => setTempRoute({ ...tempRoute, timeWeeks: parseInt(e.target.value) || 0 })}
-                className="input-glass font-bold"
-              />
+              <p className="text-lg font-black text-foreground">{routeInfo.timeWeeks}</p>
             </div>
           </div>
           <div className="space-y-3">

@@ -327,6 +327,7 @@ export type Database = {
           resources: string[] | null
           sessions_done: number
           sessions_total: number
+          start_date: string | null
           time_weeks: number
           user_id: string
         }
@@ -335,6 +336,7 @@ export type Database = {
           resources?: string[] | null
           sessions_done?: number
           sessions_total?: number
+          start_date?: string | null
           time_weeks?: number
           user_id: string
         }
@@ -343,6 +345,7 @@ export type Database = {
           resources?: string[] | null
           sessions_done?: number
           sessions_total?: number
+          start_date?: string | null
           time_weeks?: number
           user_id?: string
         }

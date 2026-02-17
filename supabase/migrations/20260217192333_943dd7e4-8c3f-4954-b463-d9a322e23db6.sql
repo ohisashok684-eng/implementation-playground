@@ -1,0 +1,1 @@
+ALTER TABLE public.route_info ADD COLUMN start_date date NULL;
