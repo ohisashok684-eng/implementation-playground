@@ -193,26 +193,31 @@ const Index = () => {
 
   const handleSaveGoal = async () => {
     if (!user) return;
-    if (editingGoalId) {
-      setGoals(goals.map((g) => (g.id === editingGoalId ? { ...tempGoal } : g)));
-      await externalDb.update('goals', {
-        title: tempGoal.title,
-        amount: tempGoal.amount,
-        has_amount: tempGoal.hasAmount,
-        progress: tempGoal.progress,
-      }, { id: String(editingGoalId) });
-    } else {
-      const res = await externalDb.insert('goals', {
-        title: tempGoal.title,
-        amount: tempGoal.amount,
-        has_amount: tempGoal.hasAmount,
-        progress: tempGoal.progress,
-      });
-      if (res.data) {
-        setGoals([...goals, { ...tempGoal, id: res.data.id }]);
+    try {
+      if (editingGoalId) {
+        setGoals(goals.map((g) => (g.id === editingGoalId ? { ...tempGoal } : g)));
+        await externalDb.update('goals', {
+          title: tempGoal.title,
+          amount: tempGoal.amount,
+          has_amount: tempGoal.hasAmount,
+          progress: tempGoal.progress,
+        }, { id: String(editingGoalId) });
+      } else {
+        const res = await externalDb.insert('goals', {
+          title: tempGoal.title,
+          amount: tempGoal.amount,
+          has_amount: tempGoal.hasAmount,
+          progress: tempGoal.progress,
+        });
+        if (res.data) {
+          setGoals([...goals, { ...tempGoal, id: res.data.id }]);
+        }
       }
+      setIsGoalModalOpen(false);
+      setNotification({ type: 'success', message: 'Цель сохранена' });
+    } catch (err) {
+      setNotification({ type: 'error', message: 'Ошибка сохранения цели' });
     }
-    setIsGoalModalOpen(false);
   };
 
   const deleteGoal = async (id: string | number) => {
@@ -229,14 +234,19 @@ const Index = () => {
 
   const saveRoute = async () => {
     if (!user) return;
-    setRouteInfo({ ...tempRoute });
-    await externalDb.upsert('route_info', {
-      sessions_total: tempRoute.sessionsTotal,
-      sessions_done: tempRoute.sessionsDone,
-      time_weeks: tempRoute.timeWeeks,
-      resources: tempRoute.resources,
-    }, 'user_id');
-    setIsRouteModalOpen(false);
+    try {
+      setRouteInfo({ ...tempRoute });
+      await externalDb.upsert('route_info', {
+        sessions_total: tempRoute.sessionsTotal,
+        sessions_done: tempRoute.sessionsDone,
+        time_weeks: tempRoute.timeWeeks,
+        resources: tempRoute.resources,
+      }, 'user_id');
+      setIsRouteModalOpen(false);
+      setNotification({ type: 'success', message: 'Маршрут сохранён' });
+    } catch (err) {
+      setNotification({ type: 'error', message: 'Ошибка сохранения маршрута' });
+    }
   };
 
   const addResource = () => {
@@ -261,12 +271,17 @@ const Index = () => {
       [metricKey]: { ...prev[metricKey], previous: prevValue, current: val },
     }));
     setEditingMetric(null);
-    await externalDb.upsert('progress_metrics', {
-      metric_key: metricKey,
-      label: metric.label,
-      current_value: val,
-      previous_value: prevValue,
-    }, 'user_id,metric_key');
+    try {
+      await externalDb.upsert('progress_metrics', {
+        metric_key: metricKey,
+        label: metric.label,
+        current_value: val,
+        previous_value: prevValue,
+      }, 'user_id,metric_key');
+      setNotification({ type: 'success', message: 'Значение сохранено' });
+    } catch (err) {
+      setNotification({ type: 'error', message: 'Ошибка сохранения' });
+    }
   };
 
   // Volcano handlers
