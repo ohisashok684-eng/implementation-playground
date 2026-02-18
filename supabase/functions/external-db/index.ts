@@ -189,8 +189,15 @@ Deno.serve(async (req) => {
             sessions_total INTEGER NOT NULL DEFAULT 8,
             sessions_done INTEGER NOT NULL DEFAULT 0,
             time_weeks INTEGER NOT NULL DEFAULT 12,
-            resources TEXT[] DEFAULT '{}'
+            resources TEXT[] DEFAULT '{}',
+            start_date DATE
           );
+
+          -- Add start_date if table already exists without it
+          DO $$ BEGIN
+            ALTER TABLE ${SCHEMA}.route_info ADD COLUMN start_date DATE;
+          EXCEPTION WHEN duplicate_column THEN NULL;
+          END $$;
 
           CREATE TABLE IF NOT EXISTS ${SCHEMA}.diary_entries (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
