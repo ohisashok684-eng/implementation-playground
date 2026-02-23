@@ -104,7 +104,7 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
 
   const statusColor = (status: string) => {
     if (status === 'Завершена') return 'bg-emerald-100 text-emerald-700';
-    if (status === 'В работе') return 'bg-primary/30 text-lime-dark';
+    if (status === 'На согласование') return 'bg-primary/30 text-lime-dark';
     return 'bg-muted text-muted-foreground';
   };
 
