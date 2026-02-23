@@ -32,12 +32,14 @@ const AdminClientView = () => {
   const [showRoadmapForm, setShowRoadmapForm] = useState(false);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [showPointBForm, setShowPointBForm] = useState(false);
+  const [showGoalForm, setShowGoalForm] = useState(false);
   const [editingRoadmap, setEditingRoadmap] = useState<string | null>(null);
 
   // Editing IDs (null = create mode)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingProtocolId, setEditingProtocolId] = useState<string | null>(null);
   const [editingRoadmapId, setEditingRoadmapId] = useState<string | null>(null);
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
 
   // Session form
   const [sessionForm, setSessionForm] = useState({
@@ -52,6 +54,11 @@ const AdminClientView = () => {
   // Roadmap form
   const [roadmapForm, setRoadmapForm] = useState({
     title: '', description: '', status: 'В работе', steps: [''] as string[], file_url: ''
+  });
+
+  // Goal form
+  const [goalForm, setGoalForm] = useState({
+    title: '', amount: '', has_amount: false, progress: 0
   });
 
   // Question form
@@ -413,6 +420,63 @@ const AdminClientView = () => {
     }
   };
 
+  // === GOALS ===
+  const openCreateGoal = () => {
+    setEditingGoalId(null);
+    setGoalForm({ title: '', amount: '', has_amount: false, progress: 0 });
+    setShowGoalForm(true);
+  };
+
+  const openEditGoal = (g: any) => {
+    setEditingGoalId(g.id);
+    setGoalForm({
+      title: g.title,
+      amount: g.amount || '',
+      has_amount: g.has_amount || false,
+      progress: g.progress || 0,
+    });
+    setShowGoalForm(true);
+  };
+
+  const handleSaveGoal = async () => {
+    if (!userId || !goalForm.title.trim()) return;
+    try {
+      if (editingGoalId) {
+        await externalDb.admin.update('goals', {
+          title: goalForm.title,
+          amount: goalForm.has_amount ? goalForm.amount : null,
+          has_amount: goalForm.has_amount,
+          progress: goalForm.progress,
+        }, { id: editingGoalId });
+        toast({ title: 'Цель обновлена' });
+      } else {
+        await externalDb.admin.insert('goals', {
+          user_id: userId,
+          title: goalForm.title,
+          amount: goalForm.has_amount ? goalForm.amount : null,
+          has_amount: goalForm.has_amount,
+          progress: goalForm.progress,
+        });
+        toast({ title: 'Цель добавлена' });
+      }
+      setShowGoalForm(false);
+      setEditingGoalId(null);
+      loadClientData(userId);
+    } catch (error: any) {
+      toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteGoal = async (id: string) => {
+    try {
+      await externalDb.admin.delete('goals', { id });
+      toast({ title: 'Цель удалена' });
+      loadClientData(userId!);
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err.message, variant: 'destructive' });
+    }
+  };
+
   // === DELETE HANDLERS ===
   const handleDeleteSession = async (id: string) => {
     try {
@@ -551,18 +615,25 @@ const AdminClientView = () => {
         </div>
       </Section>
 
-      {/* ========== GOALS (read-only) ========== */}
-      <Section title="Цели клиента" icon={Target}>
+      {/* ========== GOALS ========== */}
+      <Section title="Цели клиента" icon={Target} action={<AddButton onClick={openCreateGoal} label="Добавить" />}>
         {goals.length === 0 ? (
           <p className="text-xs text-muted-foreground">Целей пока нет</p>
         ) : (
           goals.map((g) => (
             <div key={g.id} className="glass card-round p-3 space-y-1">
-              <p className="text-sm font-bold text-foreground">{g.title}</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-foreground">{g.title}</p>
+                <div className="flex items-center space-x-2">
+                  <button onClick={() => openEditGoal(g)} className="text-muted-foreground hover:text-foreground transition-colors"><Edit2 size={14} /></button>
+                  <button onClick={() => handleDeleteGoal(g.id)} className="text-muted-foreground hover:text-destructive transition-colors"><Trash2 size={14} /></button>
+                </div>
+              </div>
               {g.has_amount && <p className="text-xs text-muted-foreground">Цель: {g.amount} ₽</p>}
               <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                 <div className="h-full bg-primary rounded-full" style={{ width: `${g.progress}%` }} />
               </div>
+              <p className="text-[10px] text-muted-foreground text-right">{g.progress}%</p>
             </div>
           ))
         )}
@@ -959,6 +1030,36 @@ const AdminClientView = () => {
           <input value={pointBFormText} onChange={e => setPointBFormText(e.target.value)} className="input-glass" placeholder="Что удалось достичь?" />
         </div>
         <button onClick={handleSavePointBQuestion} className="w-full py-4 btn-dark">Добавить вопрос</button>
+      </ModalOverlay>
+
+      {/* Goal Form Modal */}
+      <ModalOverlay
+        isOpen={showGoalForm}
+        onClose={() => setShowGoalForm(false)}
+        title={editingGoalId ? 'Редактировать цель' : 'Новая цель'}
+        icon={<Target size={20} className="text-primary" />}
+      >
+        <div className="space-y-1">
+          <p className="label-tiny">Название</p>
+          <input value={goalForm.title} onChange={e => setGoalForm({...goalForm, title: e.target.value})} className="input-glass" placeholder="Например: Увеличить доход" />
+        </div>
+        <div className="flex items-center space-x-3">
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input type="checkbox" checked={goalForm.has_amount} onChange={e => setGoalForm({...goalForm, has_amount: e.target.checked})} className="accent-primary" />
+            <span className="text-xs text-foreground">Есть сумма</span>
+          </label>
+        </div>
+        {goalForm.has_amount && (
+          <div className="space-y-1">
+            <p className="label-tiny">Сумма (₽)</p>
+            <input value={goalForm.amount} onChange={e => setGoalForm({...goalForm, amount: e.target.value})} className="input-glass" placeholder="100 000" />
+          </div>
+        )}
+        <div className="space-y-1">
+          <p className="label-tiny">Прогресс ({goalForm.progress}%)</p>
+          <input type="range" min={0} max={100} value={goalForm.progress} onChange={e => setGoalForm({...goalForm, progress: +e.target.value})} className="w-full accent-primary" />
+        </div>
+        <button onClick={handleSaveGoal} className="w-full py-4 btn-dark">{editingGoalId ? 'Сохранить' : 'Добавить цель'}</button>
       </ModalOverlay>
 
       {/* Removed: Volcanoes, Metrics, Diary — private to user */}
