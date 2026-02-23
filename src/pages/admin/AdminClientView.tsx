@@ -996,7 +996,7 @@ const AdminClientView = () => {
       </ModalOverlay>
 
       {/* ========== POINT B QUESTIONS ========== */}
-      <Section title="Вопросы «Точка Б»" icon={Rocket} action={<AddButton onClick={() => setShowPointBForm(true)} label="Добавить" />}>
+      <Section title="Итоговые вопросы" icon={Rocket} action={<AddButton onClick={() => setShowPointBForm(true)} label="Добавить" />}>
         {pointBQuestions.length === 0 ? (
           <p className="text-xs text-muted-foreground">Вопросов для итогов менторства нет</p>
         ) : (
@@ -1026,7 +1026,7 @@ const AdminClientView = () => {
       <ModalOverlay
         isOpen={showPointBForm}
         onClose={() => setShowPointBForm(false)}
-        title="Новый вопрос «Точка Б»"
+        title="Новый итоговый вопрос"
       >
         <div className="space-y-1">
           <p className="label-tiny">Текст вопроса</p>
