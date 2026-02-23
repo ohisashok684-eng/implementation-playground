@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigation, ChevronRight, Flag, Rocket, ArrowRight, Pencil, Plus, MessageSquare, FileText, ExternalLink, CheckCircle2, Circle, Trash2, X } from 'lucide-react';
+import { Navigation, ChevronRight, Flag, Rocket, ArrowRight, Pencil, Plus, MessageSquare, FileText, ExternalLink, CheckCircle2, Circle, Trash2, X, Check } from 'lucide-react';
 import { externalDb } from '@/lib/externalDb';
 import { formatAmount } from '@/lib/format';
 
@@ -15,6 +15,7 @@ interface DashboardTabProps {
   onEditRoute: () => void;
   onEditGoal: (goal: Goal) => void;
   onAddGoal: () => void;
+  onToggleStep: (goalId: string | number, stepIndex: number) => void;
   onEditMetric: (id: string) => void;
   onOpenPointA: () => void;
   onOpenPointB: () => void;
@@ -29,6 +30,7 @@ const DashboardTab = ({
   onEditRoute,
   onEditGoal,
   onAddGoal,
+  onToggleStep,
   onEditMetric,
   onOpenPointA,
   onOpenPointB,
@@ -158,8 +160,27 @@ const DashboardTab = ({
               </div>
               <span className="text-xs font-bold text-muted-foreground">{g.progress}%</span>
             </div>
+            {g.steps.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                {g.steps.map((step, i) => {
+                  const done = g.stepsDone?.[i] || false;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => onToggleStep(g.id, i)}
+                      className="flex items-center space-x-2 w-full text-left group/step"
+                    >
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${done ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}>
+                        {done && <Check size={10} className="text-primary-foreground" />}
+                      </div>
+                      <span className={`text-xs transition-colors ${done ? 'line-through text-muted-foreground' : 'text-foreground'}`}>{step}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <button onClick={() => onEditGoal(g)} className="flex items-center space-x-1 text-muted-foreground hover:text-secondary text-xs font-medium transition-colors">
-              <span>Прогресс по цели</span>
+              <span>Редактировать</span>
               <ArrowRight size={12} />
             </button>
           </div>
