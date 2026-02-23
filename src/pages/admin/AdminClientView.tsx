@@ -53,7 +53,7 @@ const AdminClientView = () => {
 
   // Roadmap form
   const [roadmapForm, setRoadmapForm] = useState({
-    title: '', description: '', status: 'В работе', steps: [''] as string[], file_url: ''
+    title: '', description: '', status: 'На согласование', steps: [''] as string[], file_url: ''
   });
 
   // Goal form
@@ -248,7 +248,7 @@ const AdminClientView = () => {
     setRoadmapForm({
       title: r.title,
       description: r.description || '',
-      status: r.status || 'В работе',
+      status: r.status || 'На согласование',
       steps: [''],
       file_url: r.file_url || '',
     });
@@ -257,7 +257,7 @@ const AdminClientView = () => {
 
   const openCreateRoadmap = () => {
     setEditingRoadmapId(null);
-    setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''], file_url: '' });
+    setRoadmapForm({ title: '', description: '', status: 'На согласование', steps: [''], file_url: '' });
     setShowRoadmapForm(true);
   };
 
@@ -302,7 +302,7 @@ const AdminClientView = () => {
       }
       setShowRoadmapForm(false);
       setEditingRoadmapId(null);
-      setRoadmapForm({ title: '', description: '', status: 'В работе', steps: [''], file_url: '' });
+      setRoadmapForm({ title: '', description: '', status: 'На согласование', steps: [''], file_url: '' });
       loadClientData(userId!);
     } catch (error: any) {
       toast({ title: 'Ошибка', description: error.message, variant: 'destructive' });
@@ -874,7 +874,7 @@ const AdminClientView = () => {
         <div className="space-y-1">
           <p className="label-tiny">Статус</p>
           <select value={roadmapForm.status} onChange={e => setRoadmapForm({...roadmapForm, status: e.target.value})} className="input-glass">
-            <option>В работе</option>
+            <option>На согласование</option>
             <option>Утверждена</option>
             <option>Завершена</option>
           </select>
