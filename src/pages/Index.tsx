@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { User, Plus, Trash2, X, Flag, Rocket, Check, LogOut, RefreshCw, Loader2 } from 'lucide-react';
+import { User, Plus, Trash2, X, Flag, Rocket, Check, LogOut, RefreshCw, Loader2, FileDown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { externalDb } from '@/lib/externalDb';
 import { formatAmount } from '@/lib/format';
@@ -346,6 +346,25 @@ const Index = () => {
     setSavedStatus(index);
     setTimeout(() => setSavedStatus(null), 1500);
   };
+
+  // Print Point B answers to PDF
+  const handlePrintPointB = () => {
+    const filled = pointBQuestions.filter(q => (pointBAnswers[q.id] || '').trim());
+    if (filled.length === 0) return;
+    const dateStr = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    const questionsHtml = filled.map(q =>
+      `<div style="margin-bottom:24px"><p style="font-size:13px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px">${q.question_text}</p><p style="font-size:15px;line-height:1.7;margin:0;white-space:pre-wrap">${pointBAnswers[q.id]}</p></div>`
+    ).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Итоги менторства</title><style>@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:600px;margin:40px auto;padding:0 24px;color:#1a1a1a}h1{font-size:24px;margin:0 0 4px}p.date{font-size:13px;color:#999;margin:0 0 32px}hr{border:none;border-top:1px solid #eee;margin:0 0 32px}</style></head><body><h1>Итоги менторства</h1><p class="date">${dateStr}</p><hr>${questionsHtml}</body></html>`;
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      setTimeout(() => { w.print(); }, 300);
+    }
+  };
+
+  const hasAnyAnswer = pointBQuestions.some(q => (pointBAnswers[q.id] || '').trim());
 
   // Point B handlers
   const fixResultB = async (questionId: string) => {
@@ -766,6 +785,17 @@ const Index = () => {
               </div>
             ))}
           </div>
+        )}
+
+        {pointBQuestions.length > 0 && (
+          <button
+            onClick={handlePrintPointB}
+            disabled={!hasAnyAnswer}
+            className="w-full py-4 btn-dark flex items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+          >
+            <FileDown size={16} />
+            Скачать PDF
+          </button>
         )}
       </ModalOverlay>
     </div>
