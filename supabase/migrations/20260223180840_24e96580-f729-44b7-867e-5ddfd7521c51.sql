@@ -1,0 +1,1 @@
+ALTER TABLE public.goals ADD COLUMN steps_done BOOLEAN[] DEFAULT '{}'::boolean[];

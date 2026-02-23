@@ -56,7 +56,7 @@ const Index = () => {
   // Modal states
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | number | null>(null);
-  const [tempGoal, setTempGoal] = useState<Goal>({ id: 0, title: '', amount: '', hasAmount: false, progress: 0, steps: [] });
+  const [tempGoal, setTempGoal] = useState<Goal>({ id: 0, title: '', amount: '', hasAmount: false, progress: 0, steps: [], stepsDone: [] });
 
   const [isRouteModalOpen, setIsRouteModalOpen] = useState(false);
   const [tempRoute, setTempRoute] = useState(routeInfo);
@@ -96,7 +96,7 @@ const Index = () => {
 
       if (goalsRes.data && goalsRes.data.length > 0) {
         setGoals(goalsRes.data.map((g: any) => ({
-          id: g.id, title: g.title, amount: g.amount || '', hasAmount: g.has_amount, progress: g.progress, steps: g.steps || [],
+          id: g.id, title: g.title, amount: g.amount || '', hasAmount: g.has_amount, progress: g.progress, steps: g.steps || [], stepsDone: g.steps_done || [],
         })));
       }
 
@@ -181,7 +181,7 @@ const Index = () => {
   // Goal handlers
   const openAddGoal = () => {
     setEditingGoalId(null);
-    setTempGoal({ id: 0, title: '', amount: '', hasAmount: false, progress: 0, steps: [] });
+    setTempGoal({ id: 0, title: '', amount: '', hasAmount: false, progress: 0, steps: [], stepsDone: [] });
     setIsGoalModalOpen(true);
   };
 
@@ -194,25 +194,37 @@ const Index = () => {
   const handleSaveGoal = async () => {
     if (!user) return;
     try {
+      const cleanSteps = tempGoal.steps.filter(s => s.trim());
+      // Align stepsDone array to match cleanSteps length
+      const cleanDone = cleanSteps.map((_, i) => {
+        // Find original index of this step to preserve done status
+        const origIdx = tempGoal.steps.indexOf(cleanSteps[i]);
+        return tempGoal.stepsDone[origIdx] || false;
+      });
+      const progress = cleanSteps.length > 0 ? Math.round((cleanDone.filter(Boolean).length / cleanSteps.length) * 100) : tempGoal.progress;
+      const goalToSave = { ...tempGoal, steps: cleanSteps, stepsDone: cleanDone, progress };
+
       if (editingGoalId) {
-        setGoals(goals.map((g) => (g.id === editingGoalId ? { ...tempGoal } : g)));
+        setGoals(goals.map((g) => (g.id === editingGoalId ? goalToSave : g)));
         await externalDb.update('goals', {
-          title: tempGoal.title,
-          amount: tempGoal.amount,
-          has_amount: tempGoal.hasAmount,
-          progress: tempGoal.progress,
-          steps: tempGoal.steps.filter(s => s.trim()),
+          title: goalToSave.title,
+          amount: goalToSave.amount,
+          has_amount: goalToSave.hasAmount,
+          progress: goalToSave.progress,
+          steps: goalToSave.steps,
+          steps_done: goalToSave.stepsDone,
         }, { id: String(editingGoalId) });
       } else {
         const res = await externalDb.insert('goals', {
-          title: tempGoal.title,
-          amount: tempGoal.amount,
-          has_amount: tempGoal.hasAmount,
-          progress: tempGoal.progress,
-          steps: tempGoal.steps.filter(s => s.trim()),
+          title: goalToSave.title,
+          amount: goalToSave.amount,
+          has_amount: goalToSave.hasAmount,
+          progress: goalToSave.progress,
+          steps: goalToSave.steps,
+          steps_done: goalToSave.stepsDone,
         });
         if (res.data) {
-          setGoals([...goals, { ...tempGoal, id: res.data.id }]);
+          setGoals([...goals, { ...goalToSave, id: res.data.id }]);
         }
       }
       setIsGoalModalOpen(false);
@@ -228,7 +240,23 @@ const Index = () => {
     setIsGoalModalOpen(false);
   };
 
-  // Route handlers
+  const toggleGoalStep = async (goalId: string | number, stepIndex: number) => {
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return;
+    const newDone = [...goal.stepsDone];
+    // Ensure array is long enough
+    while (newDone.length < goal.steps.length) newDone.push(false);
+    newDone[stepIndex] = !newDone[stepIndex];
+    const progress = goal.steps.length > 0 ? Math.round((newDone.filter(Boolean).length / goal.steps.length) * 100) : 0;
+    const updated = goals.map(g => g.id === goalId ? { ...g, stepsDone: newDone, progress } : g);
+    setGoals(updated);
+    try {
+      await externalDb.update('goals', { steps_done: newDone, progress }, { id: String(goalId) });
+    } catch (err) {
+      setNotification({ type: 'error', message: 'Ошибка сохранения' });
+    }
+  };
+
   const openRouteModal = () => {
     setTempRoute({ ...routeInfo });
     setIsRouteModalOpen(true);
@@ -434,6 +462,7 @@ const Index = () => {
             onEditRoute={openRouteModal}
             onEditGoal={openEditGoal}
             onAddGoal={openAddGoal}
+            onToggleStep={toggleGoalStep}
             onEditMetric={setEditingMetric}
             onOpenPointA={() => setIsPointAModalOpen(true)}
             onOpenPointB={() => setIsPointBModalOpen(true)}
@@ -502,24 +531,31 @@ const Index = () => {
               />
             </div>
           )}
-          <div className="space-y-2">
-            <p className="label-tiny">Прогресс (%)</p>
-            <div className="flex items-center space-x-3">
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={tempGoal.progress}
-                onChange={(e) => setTempGoal({ ...tempGoal, progress: parseInt(e.target.value) })}
-                className="w-full h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
-              <span className="text-sm font-bold text-foreground w-12 text-right">{tempGoal.progress}%</span>
+          {tempGoal.steps.length > 0 && (
+            <div className="space-y-2">
+              <p className="label-tiny">Прогресс ({tempGoal.progress}%)</p>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${tempGoal.progress}%` }} />
+              </div>
             </div>
-          </div>
+          )}
           <div className="space-y-3">
             <p className="label-tiny">Что мне нужно сделать, чтобы прийти к этой цели?</p>
             {tempGoal.steps.map((step, i) => (
               <div key={i} className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newDone = [...tempGoal.stepsDone];
+                    while (newDone.length < tempGoal.steps.length) newDone.push(false);
+                    newDone[i] = !newDone[i];
+                    const progress = tempGoal.steps.length > 0 ? Math.round((newDone.filter(Boolean).length / tempGoal.steps.length) * 100) : 0;
+                    setTempGoal({ ...tempGoal, stepsDone: newDone, progress });
+                  }}
+                  className={`w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${tempGoal.stepsDone[i] ? 'bg-primary border-primary' : 'border-muted-foreground/30'}`}
+                >
+                  {tempGoal.stepsDone[i] && <Check size={12} className="text-primary-foreground" />}
+                </button>
                 <input
                   type="text"
                   value={step}
@@ -528,11 +564,16 @@ const Index = () => {
                     updated[i] = e.target.value;
                     setTempGoal({ ...tempGoal, steps: updated });
                   }}
-                  className="input-glass flex-1"
+                  className={`input-glass flex-1 ${tempGoal.stepsDone[i] ? 'line-through text-muted-foreground' : ''}`}
                   placeholder={`Шаг ${i + 1}`}
                 />
                 <button
-                  onClick={() => setTempGoal({ ...tempGoal, steps: tempGoal.steps.filter((_, idx) => idx !== i) })}
+                  onClick={() => {
+                    const newSteps = tempGoal.steps.filter((_, idx) => idx !== i);
+                    const newDone = tempGoal.stepsDone.filter((_, idx) => idx !== i);
+                    const progress = newSteps.length > 0 ? Math.round((newDone.filter(Boolean).length / newSteps.length) * 100) : 0;
+                    setTempGoal({ ...tempGoal, steps: newSteps, stepsDone: newDone, progress });
+                  }}
                   className="text-muted-foreground hover:text-destructive transition-colors p-1"
                 >
                   <Trash2 size={14} />
@@ -540,7 +581,7 @@ const Index = () => {
               </div>
             ))}
             <button
-              onClick={() => setTempGoal({ ...tempGoal, steps: [...tempGoal.steps, ''] })}
+              onClick={() => setTempGoal({ ...tempGoal, steps: [...tempGoal.steps, ''], stepsDone: [...tempGoal.stepsDone, false] })}
               className="flex items-center space-x-1 text-secondary text-xs font-bold"
             >
               <Plus size={14} />

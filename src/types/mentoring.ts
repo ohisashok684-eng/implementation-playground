@@ -5,6 +5,7 @@ export interface Goal {
   hasAmount: boolean;
   progress: number;
   steps: string[];
+  stepsDone: boolean[];
 }
 
 export interface Protocol {
