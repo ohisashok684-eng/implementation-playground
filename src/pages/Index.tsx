@@ -125,9 +125,8 @@ const Index = () => {
       }
 
       if (volcanoesRes.data && volcanoesRes.data.length > 0) {
-        setVolcanoes(volcanoesRes.data.map((v: any) => ({
-          name: v.name, value: v.value, comment: v.comment,
-        })));
+        const dbMap = new Map(volcanoesRes.data.map((v: any) => [v.name, { name: v.name, value: v.value, comment: v.comment }]));
+        setVolcanoes(initialVolcanoes.map(v => (dbMap.get(v.name) as typeof v) || { ...v }));
       }
 
       if (metricsRes.data && metricsRes.data.length > 0) {
