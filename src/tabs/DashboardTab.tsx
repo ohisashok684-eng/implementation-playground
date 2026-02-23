@@ -124,7 +124,7 @@ const DashboardTab = ({
         <button onClick={onOpenPointB} className="p-5 card-round glass flex items-center space-x-3 transition-transform active:scale-95 hover:bg-card">
           <Rocket size={18} className="text-secondary" />
           <div className="text-left">
-            <p className="text-sm font-bold text-foreground">Точка Б</p>
+            <p className="text-sm font-bold text-foreground">Итоговые вопросы</p>
             <p className="text-[10px] text-muted-foreground font-medium">итоговая</p>
           </div>
         </button>
