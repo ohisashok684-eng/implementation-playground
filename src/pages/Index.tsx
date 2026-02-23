@@ -616,7 +616,7 @@ const Index = () => {
             </div>
           </div>
           <div className="space-y-3">
-            <p className="label-tiny">Ресурсы</p>
+            <p className="label-tiny">Имеющиеся ресурсы</p>
             {tempRoute.resources.map((res, i) => (
               <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-xl">
                 <span className="text-xs font-medium text-foreground">{res}</span>
