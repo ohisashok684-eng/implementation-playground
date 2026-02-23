@@ -119,6 +119,7 @@ Deno.serve(async (req) => {
             amount TEXT,
             has_amount BOOLEAN NOT NULL DEFAULT false,
             progress INTEGER NOT NULL DEFAULT 0,
+            steps TEXT[] DEFAULT '{}'::text[],
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
           );
 
@@ -196,6 +197,12 @@ Deno.serve(async (req) => {
           -- Add start_date if table already exists without it
           DO $$ BEGIN
             ALTER TABLE ${SCHEMA}.route_info ADD COLUMN start_date DATE;
+          EXCEPTION WHEN duplicate_column THEN NULL;
+          END $$;
+
+          -- Add steps to goals if table already exists without it
+          DO $$ BEGIN
+            ALTER TABLE ${SCHEMA}.goals ADD COLUMN steps TEXT[] DEFAULT '{}'::text[];
           EXCEPTION WHEN duplicate_column THEN NULL;
           END $$;
 

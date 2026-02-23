@@ -56,7 +56,7 @@ const Index = () => {
   // Modal states
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | number | null>(null);
-  const [tempGoal, setTempGoal] = useState<Goal>({ id: 0, title: '', amount: '', hasAmount: false, progress: 0 });
+  const [tempGoal, setTempGoal] = useState<Goal>({ id: 0, title: '', amount: '', hasAmount: false, progress: 0, steps: [] });
 
   const [isRouteModalOpen, setIsRouteModalOpen] = useState(false);
   const [tempRoute, setTempRoute] = useState(routeInfo);
@@ -96,7 +96,7 @@ const Index = () => {
 
       if (goalsRes.data && goalsRes.data.length > 0) {
         setGoals(goalsRes.data.map((g: any) => ({
-          id: g.id, title: g.title, amount: g.amount || '', hasAmount: g.has_amount, progress: g.progress,
+          id: g.id, title: g.title, amount: g.amount || '', hasAmount: g.has_amount, progress: g.progress, steps: g.steps || [],
         })));
       }
 
@@ -181,7 +181,7 @@ const Index = () => {
   // Goal handlers
   const openAddGoal = () => {
     setEditingGoalId(null);
-    setTempGoal({ id: 0, title: '', amount: '', hasAmount: false, progress: 0 });
+    setTempGoal({ id: 0, title: '', amount: '', hasAmount: false, progress: 0, steps: [] });
     setIsGoalModalOpen(true);
   };
 
@@ -201,6 +201,7 @@ const Index = () => {
           amount: tempGoal.amount,
           has_amount: tempGoal.hasAmount,
           progress: tempGoal.progress,
+          steps: tempGoal.steps.filter(s => s.trim()),
         }, { id: String(editingGoalId) });
       } else {
         const res = await externalDb.insert('goals', {
@@ -208,6 +209,7 @@ const Index = () => {
           amount: tempGoal.amount,
           has_amount: tempGoal.hasAmount,
           progress: tempGoal.progress,
+          steps: tempGoal.steps.filter(s => s.trim()),
         });
         if (res.data) {
           setGoals([...goals, { ...tempGoal, id: res.data.id }]);
@@ -513,6 +515,37 @@ const Index = () => {
               />
               <span className="text-sm font-bold text-foreground w-12 text-right">{tempGoal.progress}%</span>
             </div>
+          </div>
+          <div className="space-y-3">
+            <p className="label-tiny">Что мне нужно сделать, чтобы прийти к этой цели?</p>
+            {tempGoal.steps.map((step, i) => (
+              <div key={i} className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={step}
+                  onChange={(e) => {
+                    const updated = [...tempGoal.steps];
+                    updated[i] = e.target.value;
+                    setTempGoal({ ...tempGoal, steps: updated });
+                  }}
+                  className="input-glass flex-1"
+                  placeholder={`Шаг ${i + 1}`}
+                />
+                <button
+                  onClick={() => setTempGoal({ ...tempGoal, steps: tempGoal.steps.filter((_, idx) => idx !== i) })}
+                  className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => setTempGoal({ ...tempGoal, steps: [...tempGoal.steps, ''] })}
+              className="flex items-center space-x-1 text-secondary text-xs font-bold"
+            >
+              <Plus size={14} />
+              <span>Добавить шаг</span>
+            </button>
           </div>
           <button onClick={handleSaveGoal} className="w-full py-5 btn-dark">
             Сохранить

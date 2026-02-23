@@ -58,7 +58,7 @@ const AdminClientView = () => {
 
   // Goal form
   const [goalForm, setGoalForm] = useState({
-    title: '', amount: '', has_amount: false, progress: 0
+    title: '', amount: '', has_amount: false, progress: 0, steps: [''] as string[]
   });
 
   // Question form
@@ -423,7 +423,7 @@ const AdminClientView = () => {
   // === GOALS ===
   const openCreateGoal = () => {
     setEditingGoalId(null);
-    setGoalForm({ title: '', amount: '', has_amount: false, progress: 0 });
+    setGoalForm({ title: '', amount: '', has_amount: false, progress: 0, steps: [''] });
     setShowGoalForm(true);
   };
 
@@ -434,6 +434,7 @@ const AdminClientView = () => {
       amount: g.amount || '',
       has_amount: g.has_amount || false,
       progress: g.progress || 0,
+      steps: g.steps?.length > 0 ? [...g.steps] : [''],
     });
     setShowGoalForm(true);
   };
@@ -447,6 +448,7 @@ const AdminClientView = () => {
           amount: goalForm.has_amount ? goalForm.amount : null,
           has_amount: goalForm.has_amount,
           progress: goalForm.progress,
+          steps: goalForm.steps.filter(s => s.trim()),
         }, { id: editingGoalId });
         toast({ title: 'Цель обновлена' });
       } else {
@@ -456,6 +458,7 @@ const AdminClientView = () => {
           amount: goalForm.has_amount ? goalForm.amount : null,
           has_amount: goalForm.has_amount,
           progress: goalForm.progress,
+          steps: goalForm.steps.filter(s => s.trim()),
         });
         toast({ title: 'Цель добавлена' });
       }
@@ -1058,6 +1061,16 @@ const AdminClientView = () => {
         <div className="space-y-1">
           <p className="label-tiny">Прогресс ({goalForm.progress}%)</p>
           <input type="range" min={0} max={100} value={goalForm.progress} onChange={e => setGoalForm({...goalForm, progress: +e.target.value})} className="w-full accent-primary" />
+        </div>
+        <div className="space-y-2">
+          <p className="label-tiny">Шаги к цели</p>
+          {goalForm.steps.map((step, i) => (
+            <div key={i} className="flex items-center space-x-2">
+              <input value={step} onChange={e => { const s = [...goalForm.steps]; s[i] = e.target.value; setGoalForm({...goalForm, steps: s}); }} className="input-glass flex-1" placeholder={`Шаг ${i + 1}`} />
+              <button onClick={() => setGoalForm({...goalForm, steps: goalForm.steps.filter((_, idx) => idx !== i)})} className="text-muted-foreground hover:text-destructive transition-colors p-1"><Trash2 size={14} /></button>
+            </div>
+          ))}
+          <button onClick={() => setGoalForm({...goalForm, steps: [...goalForm.steps, '']})} className="flex items-center space-x-1 text-secondary text-xs font-bold"><Plus size={14} /><span>Добавить шаг</span></button>
         </div>
         <button onClick={handleSaveGoal} className="w-full py-4 btn-dark">{editingGoalId ? 'Сохранить' : 'Добавить цель'}</button>
       </ModalOverlay>
