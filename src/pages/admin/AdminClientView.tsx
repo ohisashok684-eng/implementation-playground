@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Link, Check, Edit2, MessageSquare, Rocket, Calendar, Clock, Hash } from 'lucide-react';
+import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Link, Check, Edit2, MessageSquare, Rocket, Calendar, Clock, Hash, EyeOff, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
 
@@ -555,14 +555,28 @@ const AdminClientView = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center space-x-3">
-        <button onClick={() => navigate('/admin')} className="p-2 rounded-xl bg-muted hover:bg-muted/80 transition-colors">
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h1 className="text-xl font-black text-foreground">{profile.full_name || profile.email}</h1>
-          <p className="text-xs text-muted-foreground">{profile.email}</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <button onClick={() => navigate('/admin')} className="p-2 rounded-xl bg-muted hover:bg-muted/80 transition-colors">
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="text-xl font-black text-foreground">{profile.full_name || profile.email}</h1>
+            <p className="text-xs text-muted-foreground">{profile.email}</p>
+          </div>
         </div>
+        <button
+          onClick={async () => {
+            const newVal = !profile.is_hidden;
+            setProfile((prev: any) => ({ ...prev, is_hidden: newVal }));
+            await supabase.from('profiles').update({ is_hidden: newVal }).eq('user_id', userId);
+            toast({ title: newVal ? 'Клиент скрыт из дашборда' : 'Клиент показан в дашборде' });
+          }}
+          className={`p-2 rounded-xl transition-colors ${profile.is_hidden ? 'bg-secondary/20 text-secondary' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+          title={profile.is_hidden ? 'Показать в дашборде' : 'Скрыть из дашборда'}
+        >
+          {profile.is_hidden ? <Eye size={18} /> : <EyeOff size={18} />}
+        </button>
       </div>
 
       {/* ========== MENTORING INFO ========== */}

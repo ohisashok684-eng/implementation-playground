@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Target, FileText, Activity } from 'lucide-react';
+import { Users, Target, FileText, Activity, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { externalDb } from '@/lib/externalDb';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 
 interface ClientSummary {
   id: string;
@@ -10,6 +11,7 @@ interface ClientSummary {
   full_name: string;
   email: string;
   is_blocked: boolean;
+  is_hidden: boolean;
   goals_count: number;
   sessions_count: number;
 }
@@ -28,7 +30,7 @@ const AdminDashboard = () => {
     // Load profiles (excluding super_admins) - profiles stay on Supabase
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, user_id, full_name, email, is_blocked');
+      .select('id, user_id, full_name, email, is_blocked, is_hidden');
 
     const { data: adminRoles } = await supabase
       .from('user_roles')
@@ -58,11 +60,12 @@ const AdminDashboard = () => {
     }
 
     setClients(summaries);
+    const visible = summaries.filter(c => !c.is_hidden);
     setStats({
-      total: summaries.length,
-      active: summaries.filter(c => !c.is_blocked).length,
-      blocked: summaries.filter(c => c.is_blocked).length,
-      sessions: totalSessions,
+      total: visible.length,
+      active: visible.filter(c => !c.is_blocked).length,
+      blocked: visible.filter(c => c.is_blocked).length,
+      sessions: visible.reduce((sum, c) => sum + c.sessions_count, 0),
     });
     setLoading(false);
   };
@@ -100,10 +103,10 @@ const AdminDashboard = () => {
       {/* Client list */}
       <div className="space-y-3">
         <h2 className="text-lg font-bold text-foreground">Клиенты</h2>
-        {clients.length === 0 ? (
+        {clients.filter(c => !c.is_hidden).length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">Клиентов пока нет</p>
         ) : (
-          clients.map((c) => (
+          clients.filter(c => !c.is_hidden).map((c) => (
             <button
               key={c.id}
               onClick={() => navigate(`/admin/clients/${c.user_id}`)}
@@ -124,6 +127,39 @@ const AdminDashboard = () => {
               <Target size={16} className="text-muted-foreground flex-shrink-0" />
             </button>
           ))
+        )}
+
+        {/* Hidden clients */}
+        {clients.filter(c => c.is_hidden).length > 0 && (
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center space-x-2 text-xs font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors w-full pt-2">
+              <ChevronDown size={14} className="transition-transform [[data-state=open]_&]:rotate-180" />
+              <span>Скрытые ({clients.filter(c => c.is_hidden).length})</span>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 pt-3">
+              {clients.filter(c => c.is_hidden).map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => navigate(`/admin/clients/${c.user_id}`)}
+                  className="w-full glass card-round p-4 flex items-center space-x-3 text-left hover:shadow-md transition-shadow opacity-60"
+                >
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <Users size={18} className="text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-foreground truncate">
+                      {c.full_name || c.email}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Скрыт из статистики
+                      {c.is_blocked && <span className="text-destructive ml-2">· Заблокирован</span>}
+                    </p>
+                  </div>
+                  <Target size={16} className="text-muted-foreground flex-shrink-0" />
+                </button>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
         )}
       </div>
     </div>
