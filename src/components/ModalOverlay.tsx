@@ -24,7 +24,7 @@ const ModalOverlay = ({ isOpen, onClose, title, children, icon }: ModalOverlayPr
             <X size={24} />
           </button>
         </div>
-        <div className="overflow-y-auto flex-1 p-6 space-y-6">
+        <div className="overflow-y-auto flex-1 min-h-0 p-6 space-y-6">
           {children}
         </div>
       </div>
