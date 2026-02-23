@@ -63,6 +63,7 @@ export type Database = {
           has_amount: boolean
           id: string
           progress: number
+          steps: string[] | null
           title: string
           user_id: string
         }
@@ -72,6 +73,7 @@ export type Database = {
           has_amount?: boolean
           id?: string
           progress?: number
+          steps?: string[] | null
           title: string
           user_id: string
         }
@@ -81,6 +83,7 @@ export type Database = {
           has_amount?: boolean
           id?: string
           progress?: number
+          steps?: string[] | null
           title?: string
           user_id?: string
         }
