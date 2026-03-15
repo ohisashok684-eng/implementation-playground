@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Navigation, ChevronRight, Flag, Rocket, ArrowRight, Pencil, Plus, MessageSquare, FileText, ExternalLink, CheckCircle2, Circle, Trash2, X, Check } from 'lucide-react';
-import { externalDb } from '@/lib/externalDb';
+import { supabase } from '@/integrations/supabase/client';
 import { formatAmount } from '@/lib/format';
 
 import ModalOverlay from '@/components/ModalOverlay';
@@ -45,7 +45,7 @@ const DashboardTab = ({
 
   const persistSteps = async (sessionId: string, steps: string[]) => {
     try {
-      await externalDb.update('sessions', { steps }, { id: sessionId });
+      await supabase.from('sessions').update({ steps }).eq('id', sessionId);
     } catch (err) {
       console.error('Failed to persist steps:', err);
     }

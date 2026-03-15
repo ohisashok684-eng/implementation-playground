@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Target, FileText, Activity, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { externalDb } from '@/lib/externalDb';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 
 interface ClientSummary {
@@ -27,7 +26,7 @@ const AdminDashboard = () => {
   }, []);
 
   const loadData = async () => {
-    // Load profiles (excluding super_admins) - profiles stay on Supabase
+    // Load profiles (excluding super_admins)
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, user_id, full_name, email, is_blocked, is_hidden');
@@ -40,19 +39,14 @@ const AdminDashboard = () => {
     const adminIds = new Set(adminRoles?.map(r => r.user_id) ?? []);
     const userProfiles = (profiles ?? []).filter(p => !adminIds.has(p.user_id));
 
-    // Fetch all goals and sessions in 2 bulk queries instead of N*2
-    let allGoals: any[] = [];
-    let allSessions: any[] = [];
-    try {
-      const [goalsRes, sessionsRes] = await Promise.all([
-        externalDb.admin.select('goals'),
-        externalDb.admin.select('sessions'),
-      ]);
-      allGoals = goalsRes.data ?? [];
-      allSessions = sessionsRes.data ?? [];
-    } catch (err) {
-      console.error('Failed to load goals/sessions:', err);
-    }
+    // Fetch all goals and sessions in 2 queries instead of N*2
+    const [goalsRes, sessionsRes] = await Promise.all([
+      supabase.from('goals').select('user_id'),
+      supabase.from('sessions').select('user_id'),
+    ]);
+
+    const allGoals = goalsRes.data ?? [];
+    const allSessions = sessionsRes.data ?? [];
 
     // Count per user on client side
     const goalsCountMap: Record<string, number> = {};

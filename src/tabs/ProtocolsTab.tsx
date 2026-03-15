@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Zap, Pencil, ExternalLink, Link } from 'lucide-react';
-import { externalDb } from '@/lib/externalDb';
+import { supabase } from '@/integrations/supabase/client';
 import ModalOverlay from '@/components/ModalOverlay';
 import type { Protocol } from '@/types/mentoring';
 
@@ -45,7 +45,7 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
 
     // Persist to DB
     try {
-      await externalDb.update('protocols', updateData, { id: editingId });
+      await supabase.from('protocols').update(updateData).eq('id', editingId);
     } catch (err) {
       console.error('Failed to persist protocol update:', err);
       onNotify({ type: 'error', message: 'Ошибка сохранения' });
@@ -62,7 +62,7 @@ const ProtocolsTab = ({ protocols, onUpdateProtocols, onNotify }: ProtocolsTabPr
       } : p))
     );
     setIsModalOpen(false);
-    onNotify({ type: 'success', message: 'Протокол сохранён' });
+    onNotify({ type: 'success', message: 'Протокол обновлён' });
   };
 
   return (
