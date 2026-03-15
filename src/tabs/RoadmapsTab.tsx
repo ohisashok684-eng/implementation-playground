@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle2, Circle, Trash2, Plus, Pencil, ExternalLink } from 'lucide-react';
-import { externalDb } from '@/lib/externalDb';
+import { supabase } from '@/integrations/supabase/client';
 
 import ModalOverlay from '@/components/ModalOverlay';
 import type { Roadmap } from '@/types/mentoring';
@@ -18,7 +18,6 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
   const updateStep = async (roadmapId: number, stepIndex: number, fields: Partial<{ text: string; done: boolean; deadline: string }>) => {
     const roadmap = roadmaps.find(rm => rm.id === roadmapId);
     if (!roadmap) return;
-    const step = roadmap.steps[stepIndex];
     
     // Update local state
     onUpdateRoadmaps(
@@ -34,14 +33,13 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
 
     // Persist to DB - find the step's DB id from roadmap_steps
     try {
-      const res = await externalDb.select('roadmap_steps', {
-        filters: { roadmap_id: String(roadmapId) },
-        order: { column: 'sort_order', ascending: true },
-      });
-      const dbSteps = res.data ?? [];
-      const dbStep = dbSteps[stepIndex];
+      const { data: dbSteps } = await supabase.from('roadmap_steps')
+        .select('*')
+        .eq('roadmap_id', String(roadmapId))
+        .order('sort_order', { ascending: true });
+      const dbStep = (dbSteps ?? [])[stepIndex];
       if (dbStep) {
-        await externalDb.update('roadmap_steps', fields, { id: dbStep.id });
+        await supabase.from('roadmap_steps').update(fields).eq('id', dbStep.id);
       }
     } catch (err) {
       console.error('Failed to persist step update:', err);
@@ -65,7 +63,7 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
 
     // Persist to DB
     try {
-      await externalDb.insert('roadmap_steps', {
+      await supabase.from('roadmap_steps').insert({
         roadmap_id: String(roadmapId),
         text: '',
         sort_order: sortOrder,
@@ -88,14 +86,13 @@ const RoadmapsTab = ({ roadmaps, onUpdateRoadmaps }: RoadmapsTabProps) => {
 
     // Persist to DB
     try {
-      const res = await externalDb.select('roadmap_steps', {
-        filters: { roadmap_id: String(roadmapId) },
-        order: { column: 'sort_order', ascending: true },
-      });
-      const dbSteps = res.data ?? [];
-      const dbStep = dbSteps[stepIndex];
+      const { data: dbSteps } = await supabase.from('roadmap_steps')
+        .select('*')
+        .eq('roadmap_id', String(roadmapId))
+        .order('sort_order', { ascending: true });
+      const dbStep = (dbSteps ?? [])[stepIndex];
       if (dbStep) {
-        await externalDb.delete('roadmap_steps', { id: dbStep.id });
+        await supabase.from('roadmap_steps').delete().eq('id', dbStep.id);
       }
     } catch (err) {
       console.error('Failed to persist step deletion:', err);

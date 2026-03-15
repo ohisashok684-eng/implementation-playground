@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { User, Plus, Trash2, X, Flag, Rocket, Check, LogOut, RefreshCw, Loader2, FileDown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { externalDb } from '@/lib/externalDb';
 import { formatAmount } from '@/lib/format';
 import BottomNav from '@/components/BottomNav';
 import NotificationToast from '@/components/NotificationToast';
@@ -22,7 +21,7 @@ import {
   initialRoadmaps,
   initialRouteInfo,
 } from '@/data/initialData';
-import { supabase } from '@/integrations/supabase/client'; // keep for storage only
+import { supabase } from '@/integrations/supabase/client';
 import type { TabId, Goal, DiaryEntry } from '@/types/mentoring';
 
 const Index = () => {
@@ -73,26 +72,35 @@ const Index = () => {
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoadError(null);
-    // Only show spinner on initial load, not on background refreshes
     if (!initialLoadDoneRef.current) {
       setDataLoaded(false);
     }
     try {
-      const batchResponse = await externalDb.batch([
-        { action: 'select', table: 'goals', filters: { user_id: user.id } },
-        { action: 'select', table: 'sessions', filters: { user_id: user.id }, order: { column: 'session_number', ascending: true } },
-        { action: 'select', table: 'protocols', filters: { user_id: user.id } },
-        { action: 'select', table: 'roadmaps', filters: { user_id: user.id }, withSteps: true },
-        { action: 'select', table: 'volcanoes', filters: { user_id: user.id } },
-        { action: 'select', table: 'progress_metrics', filters: { user_id: user.id } },
-        { action: 'select', table: 'route_info', filters: { user_id: user.id }, single: true },
-        { action: 'select', table: 'diary_entries', filters: { user_id: user.id }, order: { column: 'created_at', ascending: false } },
-        { action: 'select', table: 'point_b_questions', filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } },
-        { action: 'select', table: 'point_b_answers', filters: { user_id: user.id } },
-        { action: 'select', table: 'tracking_questions', filters: { user_id: user.id }, order: { column: 'sort_order', ascending: true } },
+      const [
+        goalsRes,
+        sessionsRes,
+        protocolsRes,
+        roadmapsRes,
+        volcanoesRes,
+        metricsRes,
+        routeRes,
+        diaryRes,
+        questionsRes,
+        answersRes,
+        trackingQRes,
+      ] = await Promise.all([
+        supabase.from('goals').select('*').eq('user_id', user.id),
+        supabase.from('sessions').select('*').eq('user_id', user.id).order('session_number', { ascending: true }),
+        supabase.from('protocols').select('*').eq('user_id', user.id),
+        supabase.from('roadmaps').select('*, roadmap_steps(*)').eq('user_id', user.id),
+        supabase.from('volcanoes').select('*').eq('user_id', user.id),
+        supabase.from('progress_metrics').select('*').eq('user_id', user.id),
+        supabase.from('route_info').select('*').eq('user_id', user.id).maybeSingle(),
+        supabase.from('diary_entries').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('point_b_questions').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
+        supabase.from('point_b_answers').select('*').eq('user_id', user.id),
+        supabase.from('tracking_questions').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
       ]);
-
-      const [goalsRes, sessionsRes, protocolsRes, roadmapsRes, volcanoesRes, metricsRes, routeRes, diaryRes, questionsRes, answersRes, trackingQRes] = batchResponse.results;
 
       if (goalsRes.data && goalsRes.data.length > 0) {
         setGoals(goalsRes.data.map((g: any) => ({
@@ -160,7 +168,7 @@ const Index = () => {
       setDataLoaded(true);
       initialLoadDoneRef.current = true;
     } catch (err) {
-      console.error('Error loading data from external DB:', err);
+      console.error('Error loading data:', err);
       setLoadError('Не удалось загрузить данные. Проверьте подключение к сети.');
     }
   }, [user]);
@@ -194,9 +202,7 @@ const Index = () => {
     if (!user) return;
     try {
       const cleanSteps = tempGoal.steps.filter(s => s.trim());
-      // Align stepsDone array to match cleanSteps length
       const cleanDone = cleanSteps.map((_, i) => {
-        // Find original index of this step to preserve done status
         const origIdx = tempGoal.steps.indexOf(cleanSteps[i]);
         return tempGoal.stepsDone[origIdx] || false;
       });
@@ -205,25 +211,26 @@ const Index = () => {
 
       if (editingGoalId) {
         setGoals(goals.map((g) => (g.id === editingGoalId ? goalToSave : g)));
-        await externalDb.update('goals', {
+        await supabase.from('goals').update({
           title: goalToSave.title,
           amount: goalToSave.amount,
           has_amount: goalToSave.hasAmount,
           progress: goalToSave.progress,
           steps: goalToSave.steps,
           steps_done: goalToSave.stepsDone,
-        }, { id: String(editingGoalId) });
+        }).eq('id', String(editingGoalId));
       } else {
-        const res = await externalDb.insert('goals', {
+        const { data: res } = await supabase.from('goals').insert({
+          user_id: user.id,
           title: goalToSave.title,
           amount: goalToSave.amount,
           has_amount: goalToSave.hasAmount,
           progress: goalToSave.progress,
           steps: goalToSave.steps,
           steps_done: goalToSave.stepsDone,
-        });
-        if (res.data) {
-          setGoals([...goals, { ...goalToSave, id: res.data.id }]);
+        }).select().single();
+        if (res) {
+          setGoals([...goals, { ...goalToSave, id: res.id }]);
         }
       }
       setIsGoalModalOpen(false);
@@ -235,7 +242,7 @@ const Index = () => {
 
   const deleteGoal = async (id: string | number) => {
     setGoals(goals.filter((g) => g.id !== id));
-    await externalDb.delete('goals', { id: String(id) });
+    await supabase.from('goals').delete().eq('id', String(id));
     setIsGoalModalOpen(false);
   };
 
@@ -243,14 +250,13 @@ const Index = () => {
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
     const newDone = [...goal.stepsDone];
-    // Ensure array is long enough
     while (newDone.length < goal.steps.length) newDone.push(false);
     newDone[stepIndex] = !newDone[stepIndex];
     const progress = goal.steps.length > 0 ? Math.round((newDone.filter(Boolean).length / goal.steps.length) * 100) : 0;
     const updated = goals.map(g => g.id === goalId ? { ...g, stepsDone: newDone, progress } : g);
     setGoals(updated);
     try {
-      await externalDb.update('goals', { steps_done: newDone, progress }, { id: String(goalId) });
+      await supabase.from('goals').update({ steps_done: newDone, progress }).eq('id', String(goalId));
     } catch (err) {
       setNotification({ type: 'error', message: 'Ошибка сохранения' });
     }
@@ -265,12 +271,13 @@ const Index = () => {
     if (!user) return;
     try {
       setRouteInfo({ ...tempRoute });
-      await externalDb.upsert('route_info', {
+      await supabase.from('route_info').upsert({
+        user_id: user.id,
         sessions_total: tempRoute.sessionsTotal,
         sessions_done: tempRoute.sessionsDone,
         time_weeks: tempRoute.timeWeeks,
         resources: tempRoute.resources,
-      }, 'user_id');
+      }, { onConflict: 'user_id' });
       setIsRouteModalOpen(false);
       setNotification({ type: 'success', message: 'Маршрут сохранён' });
     } catch (err) {
@@ -301,12 +308,13 @@ const Index = () => {
     }));
     setEditingMetric(null);
     try {
-      await externalDb.upsert('progress_metrics', {
+      await supabase.from('progress_metrics').upsert({
+        user_id: user.id,
         metric_key: metricKey,
         label: metric.label,
         current_value: val,
         previous_value: prevValue,
-      }, 'user_id,metric_key');
+      }, { onConflict: 'user_id,metric_key' });
       setNotification({ type: 'success', message: 'Значение сохранено' });
     } catch (err) {
       setNotification({ type: 'error', message: 'Ошибка сохранения' });
@@ -318,14 +326,14 @@ const Index = () => {
     const updated = [...volcanoes];
     updated[index].value = newValue;
     setVolcanoes(updated);
-    // Auto-save value to DB
     if (user) {
       const v = updated[index];
-      await externalDb.upsert('volcanoes', {
+      await supabase.from('volcanoes').upsert({
+        user_id: user.id,
         name: v.name,
         value: v.value,
         comment: v.comment,
-      }, 'user_id,name');
+      }, { onConflict: 'user_id,name' });
     }
   };
 
@@ -338,11 +346,12 @@ const Index = () => {
   const fixVolcanoComment = async (index: number) => {
     if (!user) return;
     const v = volcanoes[index];
-    await externalDb.upsert('volcanoes', {
+    await supabase.from('volcanoes').upsert({
+      user_id: user.id,
       name: v.name,
       value: v.value,
       comment: v.comment,
-    }, 'user_id,name');
+    }, { onConflict: 'user_id,name' });
     setSavedStatus(index);
     setTimeout(() => setSavedStatus(null), 1500);
   };
@@ -370,10 +379,11 @@ const Index = () => {
   const fixResultB = async (questionId: string) => {
     if (!user) return;
     const text = pointBAnswers[questionId] || '';
-    await externalDb.upsert('point_b_answers', {
+    await supabase.from('point_b_answers').upsert({
+      user_id: user.id,
       question_id: questionId,
       answer_text: text,
-    }, 'user_id,question_id');
+    }, { onConflict: 'user_id,question_id' });
     setSavedStatusB(questionId);
     setTimeout(() => setSavedStatusB(null), 1500);
   };
@@ -382,15 +392,16 @@ const Index = () => {
   const handleSaveDaily = async (form: { energy: number; text: string; intent: string }) => {
     if (!user) return;
     const dateStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
-    const res = await externalDb.insert('diary_entries', {
+    const { data: res } = await supabase.from('diary_entries').insert({
+      user_id: user.id,
       entry_type: 'daily',
       entry_date: dateStr,
       energy: form.energy,
       text: form.text,
       intent: form.intent,
-    });
+    }).select().single();
     const newEntry: DiaryEntry = {
-      id: res.data?.id || Date.now(),
+      id: res?.id || Date.now(),
       type: 'daily',
       date: dateStr,
       ...form,
@@ -401,23 +412,22 @@ const Index = () => {
   const handleSaveWeekly = async (form: { achievements: string; lessons: string; nextStep: string }) => {
     if (!user) return;
     const dateStr = new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
-    const res = await externalDb.insert('diary_entries', {
+    const { data: res } = await supabase.from('diary_entries').insert({
+      user_id: user.id,
       entry_type: 'weekly',
       entry_date: dateStr,
       achievements: form.achievements,
       lessons: form.lessons,
       next_step: form.nextStep,
-    });
+    }).select().single();
     const newEntry: DiaryEntry = {
-      id: res.data?.id || Date.now(),
+      id: res?.id || Date.now(),
       type: 'weekly',
       date: dateStr,
       ...form,
     };
     setDiaryEntries([newEntry, ...diaryEntries]);
   };
-
-  // formatAmount imported from lib
 
   // Loading screen
   if (!dataLoaded && !loadError) {
@@ -707,7 +717,6 @@ const Index = () => {
                 activeColor="bg-amber-500 text-white scale-110"
               />
 
-              {/* Comment field when value < 8 */}
               {v.value < 8 && (
                 <div className="space-y-2">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
