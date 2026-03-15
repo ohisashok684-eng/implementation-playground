@@ -40,24 +40,35 @@ const AdminDashboard = () => {
     const adminIds = new Set(adminRoles?.map(r => r.user_id) ?? []);
     const userProfiles = (profiles ?? []).filter(p => !adminIds.has(p.user_id));
 
-    // Count goals and sessions per user from external DB
-    const summaries: ClientSummary[] = [];
-    let totalSessions = 0;
-
-    for (const p of userProfiles) {
-      try {
-        const [goalsRes, sessionsRes] = await Promise.all([
-          externalDb.admin.select('goals', { filters: { user_id: p.user_id } }),
-          externalDb.admin.select('sessions', { filters: { user_id: p.user_id } }),
-        ]);
-        const goalsCount = goalsRes.data?.length ?? 0;
-        const sessionsCount = sessionsRes.data?.length ?? 0;
-        totalSessions += sessionsCount;
-        summaries.push({ ...p, goals_count: goalsCount, sessions_count: sessionsCount });
-      } catch {
-        summaries.push({ ...p, goals_count: 0, sessions_count: 0 });
-      }
+    // Fetch all goals and sessions in 2 bulk queries instead of N*2
+    let allGoals: any[] = [];
+    let allSessions: any[] = [];
+    try {
+      const [goalsRes, sessionsRes] = await Promise.all([
+        externalDb.admin.select('goals'),
+        externalDb.admin.select('sessions'),
+      ]);
+      allGoals = goalsRes.data ?? [];
+      allSessions = sessionsRes.data ?? [];
+    } catch (err) {
+      console.error('Failed to load goals/sessions:', err);
     }
+
+    // Count per user on client side
+    const goalsCountMap: Record<string, number> = {};
+    for (const g of allGoals) {
+      goalsCountMap[g.user_id] = (goalsCountMap[g.user_id] || 0) + 1;
+    }
+    const sessionsCountMap: Record<string, number> = {};
+    for (const s of allSessions) {
+      sessionsCountMap[s.user_id] = (sessionsCountMap[s.user_id] || 0) + 1;
+    }
+
+    const summaries: ClientSummary[] = userProfiles.map(p => ({
+      ...p,
+      goals_count: goalsCountMap[p.user_id] || 0,
+      sessions_count: sessionsCountMap[p.user_id] || 0,
+    }));
 
     setClients(summaries);
     const visible = summaries.filter(c => !c.is_hidden);

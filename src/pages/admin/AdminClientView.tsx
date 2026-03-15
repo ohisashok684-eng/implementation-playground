@@ -83,19 +83,23 @@ const AdminClientView = () => {
 
   const loadClientData = async (uid: string) => {
     try {
-      const [profileRes, goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes, pbQuestionsRes, routeRes] = await Promise.all([
+      const [profileRes, batchRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
-        externalDb.admin.select('goals', { filters: { user_id: uid }, order: { column: 'created_at' } }),
-        externalDb.admin.select('roadmaps', { filters: { user_id: uid }, order: { column: 'created_at' }, withSteps: true }),
-        externalDb.admin.select('sessions', { filters: { user_id: uid }, order: { column: 'session_number', ascending: false } }),
-        externalDb.admin.select('protocols', { filters: { user_id: uid }, order: { column: 'created_at' } }),
-        externalDb.admin.select('diary_entries', { filters: { user_id: uid }, order: { column: 'created_at', ascending: false } }),
-        externalDb.admin.select('volcanoes', { filters: { user_id: uid } }),
-        externalDb.admin.select('progress_metrics', { filters: { user_id: uid } }),
-        externalDb.admin.select('tracking_questions', { filters: { user_id: uid }, order: { column: 'sort_order' } }),
-        externalDb.admin.select('point_b_questions', { filters: { user_id: uid }, order: { column: 'sort_order' } }),
-        externalDb.admin.select('route_info', { filters: { user_id: uid } }),
+        externalDb.admin.batch([
+          { action: 'select', table: 'goals', filters: { user_id: uid }, order: { column: 'created_at' } },
+          { action: 'select', table: 'roadmaps', filters: { user_id: uid }, order: { column: 'created_at' }, withSteps: true },
+          { action: 'select', table: 'sessions', filters: { user_id: uid }, order: { column: 'session_number', ascending: false } },
+          { action: 'select', table: 'protocols', filters: { user_id: uid }, order: { column: 'created_at' } },
+          { action: 'select', table: 'diary_entries', filters: { user_id: uid }, order: { column: 'created_at', ascending: false } },
+          { action: 'select', table: 'volcanoes', filters: { user_id: uid } },
+          { action: 'select', table: 'progress_metrics', filters: { user_id: uid } },
+          { action: 'select', table: 'tracking_questions', filters: { user_id: uid }, order: { column: 'sort_order' } },
+          { action: 'select', table: 'point_b_questions', filters: { user_id: uid }, order: { column: 'sort_order' } },
+          { action: 'select', table: 'route_info', filters: { user_id: uid } },
+        ]),
       ]);
+      const r = batchRes.results;
+      const [goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes, pbQuestionsRes, routeRes] = r;
 
       setProfile(profileRes.data || null);
       setGoals(goalsRes.data ?? []);

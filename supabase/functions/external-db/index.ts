@@ -572,6 +572,81 @@ Deno.serve(async (req) => {
           break;
         }
 
+        // ===== ADMIN BATCH =====
+        case "admin_batch": {
+          if (!(await isAdmin(req, userId))) {
+            throw new Error("Forbidden: not an admin");
+          }
+
+          const { queries: batchQueries } = body;
+          if (!Array.isArray(batchQueries) || batchQueries.length === 0) {
+            throw new Error("queries must be a non-empty array");
+          }
+
+          const allowedBatchTables = [
+            "goals", "sessions", "protocols", "roadmaps", "roadmap_steps",
+            "volcanoes", "progress_metrics", "route_info", "diary_entries",
+            "tracking_questions", "point_b_questions", "point_b_answers",
+            "point_b_results", "profiles", "user_roles",
+          ];
+
+          const batchResults: any[] = [];
+          for (const q of batchQueries) {
+            const { action: qAction, table, filters, order, single, withSteps } = q;
+            if (qAction !== "select") {
+              batchResults.push({ error: "admin_batch only supports select" });
+              continue;
+            }
+            if (!allowedBatchTables.includes(table)) {
+              batchResults.push({ error: `Table not allowed: ${table}` });
+              continue;
+            }
+
+            let bq = `SELECT * FROM ${SCHEMA}.${table}`;
+            const bParams: any[] = [];
+            const bConditions: string[] = [];
+            let bIdx = 1;
+
+            if (filters) {
+              for (const [col, val] of Object.entries(filters)) {
+                bConditions.push(`${col} = $${bIdx}`);
+                bParams.push(val);
+                bIdx++;
+              }
+            }
+            if (bConditions.length > 0) {
+              bq += ` WHERE ${bConditions.join(" AND ")}`;
+            }
+            if (order) {
+              const dir = order.ascending === false ? "DESC" : "ASC";
+              bq += ` ORDER BY ${order.column} ${dir}`;
+            }
+
+            const bRes = await conn.queryObject(bq, bParams);
+            let bData: any = single ? (bRes.rows[0] || null) : bRes.rows;
+
+            if (table === "roadmaps" && withSteps && Array.isArray(bData) && bData.length > 0) {
+              const roadmapIds = bData.map((r: any) => r.id);
+              const placeholders = roadmapIds.map((_: any, i: number) => `$${i + 1}`).join(",");
+              const stepsRes = await conn.queryObject(
+                `SELECT * FROM ${SCHEMA}.roadmap_steps WHERE roadmap_id IN (${placeholders}) ORDER BY sort_order`,
+                roadmapIds
+              );
+              const stepsMap: Record<string, any[]> = {};
+              for (const step of stepsRes.rows as any[]) {
+                if (!stepsMap[step.roadmap_id]) stepsMap[step.roadmap_id] = [];
+                stepsMap[step.roadmap_id].push(step);
+              }
+              bData = bData.map((r: any) => ({ ...r, roadmap_steps: stepsMap[r.id] || [] }));
+            }
+
+            batchResults.push({ data: bData });
+          }
+
+          result = { results: batchResults };
+          break;
+        }
+
         // ===== ADMIN SELECT (for super_admin) =====
         case "admin_select": {
           if (!(await isAdmin(req, userId))) {
