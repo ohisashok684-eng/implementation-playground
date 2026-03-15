@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Target, Map, FileText, Zap, Plus, Trash2, X, Link, Check, Edit2, MessageSquare, Rocket, Calendar, Clock, Hash, EyeOff, Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { externalDb } from '@/lib/externalDb';
 
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -83,23 +82,31 @@ const AdminClientView = () => {
 
   const loadClientData = async (uid: string) => {
     try {
-      const [profileRes, batchRes] = await Promise.all([
+      const [
+        profileRes,
+        goalsRes,
+        roadmapsRes,
+        sessionsRes,
+        protocolsRes,
+        diaryRes,
+        volcanoesRes,
+        metricsRes,
+        questionsRes,
+        pbQuestionsRes,
+        routeRes,
+      ] = await Promise.all([
         supabase.from('profiles').select('*').eq('user_id', uid).maybeSingle(),
-        externalDb.admin.batch([
-          { action: 'select', table: 'goals', filters: { user_id: uid }, order: { column: 'created_at' } },
-          { action: 'select', table: 'roadmaps', filters: { user_id: uid }, order: { column: 'created_at' }, withSteps: true },
-          { action: 'select', table: 'sessions', filters: { user_id: uid }, order: { column: 'session_number', ascending: false } },
-          { action: 'select', table: 'protocols', filters: { user_id: uid }, order: { column: 'created_at' } },
-          { action: 'select', table: 'diary_entries', filters: { user_id: uid }, order: { column: 'created_at', ascending: false } },
-          { action: 'select', table: 'volcanoes', filters: { user_id: uid } },
-          { action: 'select', table: 'progress_metrics', filters: { user_id: uid } },
-          { action: 'select', table: 'tracking_questions', filters: { user_id: uid }, order: { column: 'sort_order' } },
-          { action: 'select', table: 'point_b_questions', filters: { user_id: uid }, order: { column: 'sort_order' } },
-          { action: 'select', table: 'route_info', filters: { user_id: uid } },
-        ]),
+        supabase.from('goals').select('*').eq('user_id', uid).order('created_at'),
+        supabase.from('roadmaps').select('*, roadmap_steps(*)').eq('user_id', uid).order('created_at'),
+        supabase.from('sessions').select('*').eq('user_id', uid).order('session_number', { ascending: false }),
+        supabase.from('protocols').select('*').eq('user_id', uid).order('created_at'),
+        supabase.from('diary_entries').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
+        supabase.from('volcanoes').select('*').eq('user_id', uid),
+        supabase.from('progress_metrics').select('*').eq('user_id', uid),
+        supabase.from('tracking_questions').select('*').eq('user_id', uid).order('sort_order'),
+        supabase.from('point_b_questions').select('*').eq('user_id', uid).order('sort_order'),
+        supabase.from('route_info').select('*').eq('user_id', uid),
       ]);
-      const r = batchRes.results;
-      const [goalsRes, roadmapsRes, sessionsRes, protocolsRes, diaryRes, volcanoesRes, metricsRes, questionsRes, pbQuestionsRes, routeRes] = r;
 
       setProfile(profileRes.data || null);
       setGoals(goalsRes.data ?? []);
@@ -111,7 +118,7 @@ const AdminClientView = () => {
       setMetrics(metricsRes.data ?? []);
       setTrackingQuestions(questionsRes.data ?? []);
       setPointBQuestions(pbQuestionsRes.data ?? []);
-      setRouteInfo(routeRes.data?.[0] ?? null);
+      setRouteInfo((routeRes.data ?? [])[0] ?? null);
       setLoading(false);
 
       // Pre-fill session number
@@ -149,7 +156,6 @@ const AdminClientView = () => {
   const handleSaveSession = async () => {
     if (!userId) return;
 
-    // Validate URLs
     const validUrls = sessionForm.file_urls.filter(u => u.trim());
     for (const url of validUrls) {
       if (!isValidUrl(url)) {
@@ -162,17 +168,17 @@ const AdminClientView = () => {
       if (editingSessionId) {
         const existingSession = sessions.find(s => s.id === editingSessionId);
         const existingFiles = existingSession?.files || [];
-        await externalDb.admin.update('sessions', {
+        await supabase.from('sessions').update({
           session_number: sessionForm.session_number,
           session_date: sessionForm.session_date,
           session_time: sessionForm.session_time,
           summary: sessionForm.summary,
           steps: sessionForm.steps.filter(s => s.trim()),
           files: [...existingFiles, ...validUrls],
-        }, { id: editingSessionId });
+        }).eq('id', editingSessionId);
         toast({ title: 'Сессия обновлена' });
       } else {
-        await externalDb.admin.insert('sessions', {
+        await supabase.from('sessions').insert({
           user_id: userId,
           session_number: sessionForm.session_number,
           session_date: sessionForm.session_date,
@@ -220,15 +226,15 @@ const AdminClientView = () => {
 
     try {
       if (editingProtocolId) {
-        await externalDb.admin.update('protocols', {
+        await supabase.from('protocols').update({
           title: protocolForm.title,
           description: protocolForm.description,
           color: protocolForm.color,
           file_url: protocolForm.file_url || null,
-        }, { id: editingProtocolId });
+        }).eq('id', editingProtocolId);
         toast({ title: 'Протокол обновлён' });
       } else {
-        await externalDb.admin.insert('protocols', {
+        await supabase.from('protocols').insert({
           user_id: userId,
           title: protocolForm.title,
           description: protocolForm.description,
@@ -275,28 +281,28 @@ const AdminClientView = () => {
 
     try {
       if (editingRoadmapId) {
-        await externalDb.admin.update('roadmaps', {
+        await supabase.from('roadmaps').update({
           title: roadmapForm.title,
           description: roadmapForm.description,
           status: roadmapForm.status,
           file_url: roadmapForm.file_url || null,
-        }, { id: editingRoadmapId });
+        }).eq('id', editingRoadmapId);
         toast({ title: 'Дорожная карта обновлена' });
       } else {
-        const res = await externalDb.admin.insert('roadmaps', {
+        const { data: res } = await supabase.from('roadmaps').insert({
           user_id: userId,
           title: roadmapForm.title,
           description: roadmapForm.description,
           status: roadmapForm.status,
           file_url: roadmapForm.file_url || null,
-        });
+        }).select().single();
 
         // Insert steps
         const steps = roadmapForm.steps.filter(s => s.trim());
-        if (steps.length > 0 && res.data) {
+        if (steps.length > 0 && res) {
           for (let i = 0; i < steps.length; i++) {
-            await externalDb.admin.insert('roadmap_steps', {
-              roadmap_id: res.data.id,
+            await supabase.from('roadmap_steps').insert({
+              roadmap_id: res.id,
               text: steps[i],
               sort_order: i,
             });
@@ -316,7 +322,7 @@ const AdminClientView = () => {
   const handleAddStep = async (roadmapId: string) => {
     const maxOrder = roadmaps.find(r => r.id === roadmapId)?.roadmap_steps?.length || 0;
     try {
-      await externalDb.admin.insert('roadmap_steps', {
+      await supabase.from('roadmap_steps').insert({
         roadmap_id: roadmapId,
         text: 'Новый шаг',
         sort_order: maxOrder,
@@ -329,7 +335,7 @@ const AdminClientView = () => {
 
   const handleUpdateStep = async (stepId: string, updates: any) => {
     try {
-      await externalDb.admin.update('roadmap_steps', updates, { id: stepId });
+      await supabase.from('roadmap_steps').update(updates).eq('id', stepId);
       loadClientData(userId!);
     } catch (err) {
       console.error('Failed to update step:', err);
@@ -338,7 +344,7 @@ const AdminClientView = () => {
 
   const handleDeleteStep = async (stepId: string) => {
     try {
-      await externalDb.admin.delete('roadmap_steps', { id: stepId });
+      await supabase.from('roadmap_steps').delete().eq('id', stepId);
       loadClientData(userId!);
     } catch (err) {
       console.error('Failed to delete step:', err);
@@ -351,7 +357,7 @@ const AdminClientView = () => {
     if (!userId) return;
     const maxOrder = trackingQuestions.filter(q => q.question_type === questionForm.question_type).length;
     try {
-      await externalDb.admin.insert('tracking_questions', {
+      await supabase.from('tracking_questions').insert({
         user_id: userId,
         question_type: questionForm.question_type,
         question_text: questionForm.question_text,
@@ -369,7 +375,7 @@ const AdminClientView = () => {
 
   const handleUpdateQuestion = async (id: string, text: string) => {
     try {
-      await externalDb.admin.update('tracking_questions', { question_text: text }, { id });
+      await supabase.from('tracking_questions').update({ question_text: text }).eq('id', id);
       setEditingQuestionId(null);
       loadClientData(userId!);
     } catch (err) {
@@ -379,7 +385,7 @@ const AdminClientView = () => {
 
   const handleDeleteQuestion = async (id: string) => {
     try {
-      await externalDb.admin.delete('tracking_questions', { id });
+      await supabase.from('tracking_questions').delete().eq('id', id);
       loadClientData(userId!);
     } catch (err) {
       console.error('Failed to delete question:', err);
@@ -391,7 +397,7 @@ const AdminClientView = () => {
     if (!userId || !pointBFormText.trim()) return;
     const maxOrder = pointBQuestions.length;
     try {
-      await externalDb.admin.insert('point_b_questions', {
+      await supabase.from('point_b_questions').insert({
         user_id: userId,
         question_text: pointBFormText.trim(),
         sort_order: maxOrder,
@@ -407,7 +413,7 @@ const AdminClientView = () => {
 
   const handleUpdatePBQuestion = async (id: string, text: string) => {
     try {
-      await externalDb.admin.update('point_b_questions', { question_text: text }, { id });
+      await supabase.from('point_b_questions').update({ question_text: text }).eq('id', id);
       setEditingPBId(null);
       loadClientData(userId!);
     } catch (err) {
@@ -417,7 +423,7 @@ const AdminClientView = () => {
 
   const handleDeletePBQuestion = async (id: string) => {
     try {
-      await externalDb.admin.delete('point_b_questions', { id });
+      await supabase.from('point_b_questions').delete().eq('id', id);
       loadClientData(userId!);
     } catch (err) {
       console.error('Failed to delete PB question:', err);
@@ -447,16 +453,16 @@ const AdminClientView = () => {
     if (!userId || !goalForm.title.trim()) return;
     try {
       if (editingGoalId) {
-        await externalDb.admin.update('goals', {
+        await supabase.from('goals').update({
           title: goalForm.title,
           amount: goalForm.has_amount ? goalForm.amount : null,
           has_amount: goalForm.has_amount,
           progress: goalForm.progress,
           steps: goalForm.steps.filter(s => s.trim()),
-        }, { id: editingGoalId });
+        }).eq('id', editingGoalId);
         toast({ title: 'Цель обновлена' });
       } else {
-        await externalDb.admin.insert('goals', {
+        await supabase.from('goals').insert({
           user_id: userId,
           title: goalForm.title,
           amount: goalForm.has_amount ? goalForm.amount : null,
@@ -476,7 +482,7 @@ const AdminClientView = () => {
 
   const handleDeleteGoal = async (id: string) => {
     try {
-      await externalDb.admin.delete('goals', { id });
+      await supabase.from('goals').delete().eq('id', id);
       toast({ title: 'Цель удалена' });
       loadClientData(userId!);
     } catch (err: any) {
@@ -487,7 +493,7 @@ const AdminClientView = () => {
   // === DELETE HANDLERS ===
   const handleDeleteSession = async (id: string) => {
     try {
-      await externalDb.admin.delete('sessions', { id });
+      await supabase.from('sessions').delete().eq('id', id);
       toast({ title: 'Сессия удалена' });
       loadClientData(userId!);
     } catch (err: any) {
@@ -497,7 +503,7 @@ const AdminClientView = () => {
 
   const handleDeleteProtocol = async (id: string) => {
     try {
-      await externalDb.admin.delete('protocols', { id });
+      await supabase.from('protocols').delete().eq('id', id);
       toast({ title: 'Протокол удалён' });
       loadClientData(userId!);
     } catch (err: any) {
@@ -507,13 +513,8 @@ const AdminClientView = () => {
 
   const handleDeleteRoadmap = async (id: string) => {
     try {
-      const roadmap = roadmaps.find(r => r.id === id);
-      if (roadmap?.roadmap_steps) {
-        for (const step of roadmap.roadmap_steps) {
-          await externalDb.admin.delete('roadmap_steps', { id: step.id });
-        }
-      }
-      await externalDb.admin.delete('roadmaps', { id });
+      // roadmap_steps will cascade delete due to foreign key
+      await supabase.from('roadmaps').delete().eq('id', id);
       toast({ title: 'Дорожная карта удалена' });
       loadClientData(userId!);
     } catch (err: any) {
@@ -596,7 +597,7 @@ const AdminClientView = () => {
                   const val = e.target.value;
                   setRouteInfo((prev: any) => ({ ...prev, start_date: val }));
                   try {
-                    await externalDb.admin.upsert('route_info', { user_id: userId, start_date: val }, 'user_id');
+                    await supabase.from('route_info').upsert({ user_id: userId, start_date: val }, { onConflict: 'user_id' });
                   } catch { /* silent */ }
                 }}
                 className="input-glass text-xs"
@@ -611,7 +612,7 @@ const AdminClientView = () => {
                   const val = +e.target.value;
                   setRouteInfo((prev: any) => ({ ...prev, time_weeks: val }));
                   try {
-                    await externalDb.admin.upsert('route_info', { user_id: userId, time_weeks: val }, 'user_id');
+                    await supabase.from('route_info').upsert({ user_id: userId, time_weeks: val }, { onConflict: 'user_id' });
                   } catch { /* silent */ }
                 }}
                 className="input-glass text-center"
@@ -626,7 +627,7 @@ const AdminClientView = () => {
                   const val = +e.target.value;
                   setRouteInfo((prev: any) => ({ ...prev, sessions_total: val }));
                   try {
-                    await externalDb.admin.upsert('route_info', { user_id: userId, sessions_total: val }, 'user_id');
+                    await supabase.from('route_info').upsert({ user_id: userId, sessions_total: val }, { onConflict: 'user_id' });
                   } catch { /* silent */ }
                 }}
                 className="input-glass text-center"
