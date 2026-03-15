@@ -112,6 +112,10 @@ export const externalDb = {
 
   // Admin variants (no user_id scoping)
   admin: {
+    /** Execute multiple select queries in a single admin request */
+    batch: (queries: Array<{ action: string; table: string; [key: string]: any }>) =>
+      call('admin_batch', { queries }),
+
     select: (
       table: string,
       options?: {
